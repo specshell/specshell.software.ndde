@@ -1,0 +1,15 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyTitle>Monitor</AssemblyTitle>
+    <Product>Monitor</Product>
+    <Copyright>Copyright ©  2006</Copyright>
+    <AssemblyTitle>Monitor</AssemblyTitle>
+    <Product>Monitor</Product>
+    <Copyright>Copyright ©  2006</Copyright>
+    <TargetFramework>net5.0-windows</TargetFramework>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\Source\NDde\NDde.csproj" />
+  </ItemGroup>
+</Project>

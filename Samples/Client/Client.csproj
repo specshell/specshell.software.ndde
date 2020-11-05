@@ -1,0 +1,15 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyTitle>Client</AssemblyTitle>
+    <Product>Client</Product>
+    <Copyright>Copyright ©  2005</Copyright>
+    <AssemblyTitle>Client</AssemblyTitle>
+    <Product>Client</Product>
+    <Copyright>Copyright ©  2005</Copyright>
+    <TargetFramework>net5.0-windows</TargetFramework>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\Source\NDde\NDde.csproj" />
+  </ItemGroup>
+</Project>
