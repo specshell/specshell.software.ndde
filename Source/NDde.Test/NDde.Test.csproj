@@ -6,7 +6,6 @@
     <AssemblyTitle>NDde.Test</AssemblyTitle>
     <Product>NDde.Test</Product>
     <Copyright>Copyright ©  2005</Copyright>
-    <OutputPath>bin\$(Configuration)\</OutputPath>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\NDde\NDde.csproj" />

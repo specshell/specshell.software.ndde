@@ -1,0 +1,51 @@
+name: DotNet
+
+on:
+  pull_request:
+    branches:
+      - main
+  push:
+    branches:
+      - main
+  release:
+    types: [published]
+
+jobs:
+  test:
+    runs-on: windows-latest
+    name: Test
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+
+      - uses: actions/cache@v2
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/packages.lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
+
+      - name: Setup dotnet
+        uses: actions/setup-dotnet@v1
+        with:
+          dotnet-version: '5.0.100-rc.2.20479.15'
+
+      - run: dotnet tool install -g GitVersion.Tool
+
+      - name: GitVersion
+        run: dotnet gitversion /l console /output buildserver
+
+      - name: DotNet Build
+        shell: pwsh
+        run: |
+          dotnet restore
+          dotnet build --no-restore
+          dotnet build --configuration Release --no-restore
+          dotnet pack --configuration Release --no-restore --no-build
+
+      - name: DotNet Test
+        shell: pwsh
+        run: |
+          dotnet test --no-build --no-restore
