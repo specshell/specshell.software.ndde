@@ -1,8 +1,6 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <OutputType>WinExe</OutputType>
     <TargetFramework>net5.0-windows</TargetFramework>
-    <UseWindowsForms>true</UseWindowsForms>
     <AssemblyTitle>NDde.Test</AssemblyTitle>
     <Product>NDde.Test</Product>
     <Copyright>Copyright ©  2005</Copyright>
