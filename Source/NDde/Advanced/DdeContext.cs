@@ -120,8 +120,6 @@ namespace NDde.Advanced
         /// </remarks>
         public DdeContext()
         {
-            Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
-            _Encoding = Encoding.GetEncoding(1252);
         }
 
         /// <summary>
@@ -234,6 +232,11 @@ namespace NDde.Advanced
             {
                 lock (_LockObject)
                 {
+                    if (_Encoding == null)
+                    {
+                        Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+                        _Encoding = Encoding.GetEncoding(1252);
+                    }
                     return _Encoding;
                 }
             }
@@ -769,7 +772,7 @@ namespace NDde.Advanced
                 {
                     get
                     {
-                        const int WS_POPUP = unchecked((int) 0x80000000);
+                        const int WS_POPUP = unchecked((int)0x80000000);
                         const int WS_EX_TOOLWINDOW = 0x80;
 
                         var cp = base.CreateParams;
