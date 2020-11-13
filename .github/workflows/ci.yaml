@@ -35,7 +35,7 @@ jobs:
       - name: Setup dotnet
         uses: actions/setup-dotnet@v1
         with:
-          dotnet-version: '5.0.100-rc.2.20479.15'
+          dotnet-version: '5'
 
       - run: dotnet tool install -g GitVersion.Tool
 
@@ -54,3 +54,13 @@ jobs:
         shell: pwsh
         run: |
           dotnet test --no-build --no-restore
+
+      - name: Push NuGet
+        if: |
+          startsWith(github.event.ref, 'refs/tags/')
+          || endsWith(github.event.ref, '/main')
+        shell: pwsh
+        run: dotnet nuget push **/*.nupkg --source $Env:SOURCE --api-key $Env:TOKEN
+        env:
+          SOURCE: 'https://api.nuget.org/v3/index.json'
+          TOKEN: ${{ secrets.NUGET_API_KEY }}
