@@ -11,8 +11,8 @@
     <PackageTags>Dde Client Server Dynamic Data Exchange Library Windows</PackageTags>
     <PackageId>Specshell.NDde</PackageId>
     <PackageLicenseFile>LICENSE</PackageLicenseFile>
-    <PackageProjectUrl>https://github.com/Specshell/ndde</PackageProjectUrl>
-    <RepositoryUrl>https://github.com/Specshell/ndde</RepositoryUrl>
+    <PackageProjectUrl>https://github.com/Specshell/specshell.software.ndde</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/Specshell/specshell.software.ndde</RepositoryUrl>
     <PublishRepositoryUrl>true</PublishRepositoryUrl>
     <IncludeSymbols>true</IncludeSymbols>
     <UseFullSemVerForNuGet>true</UseFullSemVerForNuGet>
