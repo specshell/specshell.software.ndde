@@ -13,6 +13,7 @@ on:
 jobs:
   test:
     runs-on: windows-latest
+    if: "! contains(toJSON(github.event.commits.*.message), '[skip-ci]')"
     name: Test
     steps:
       - name: Checkout
@@ -59,6 +60,7 @@ jobs:
         if: |
           startsWith(github.event.ref, 'refs/tags/')
           || endsWith(github.event.ref, '/main')
+          || github.event.action == 'published'
         shell: pwsh
         run: dotnet nuget push **/*.nupkg --source $Env:SOURCE --api-key $Env:TOKEN
         env:
