@@ -53,8 +53,9 @@ namespace NDde.Internal.Server
         private readonly IDictionary<IntPtr, DdemlConversation> _ConversationTable =
             new Dictionary<IntPtr, DdemlConversation>(); // Active DDEML conversations
 
-        private int _InstanceId; // DDEML instance identifier
         private readonly string _Service = ""; // DDEML service name
+
+        private int _InstanceId; // DDEML instance identifier
         private IntPtr _ServiceHandle = IntPtr.Zero; // DDEML service handle
 
         public DdemlServer(string service)
@@ -65,14 +66,12 @@ namespace NDde.Internal.Server
         public DdemlServer(string service, DdemlContext context)
         {
             if (service == null)
-                throw new ArgumentNullException("service");
+                throw new ArgumentNullException(nameof(service));
             if (service.Length > Ddeml.MAX_STRING_SIZE)
-                throw new ArgumentException(Resources.StringParameterInvalidMessage, "service");
-            if (context == null)
-                throw new ArgumentNullException("context");
+                throw new ArgumentException(Resources.StringParameterInvalidMessage, nameof(service));
 
             _Service = service;
-            _Context = context;
+            _Context = context ?? throw new ArgumentNullException(nameof(context));
         }
 
         public virtual string Service => _Service;
@@ -96,40 +95,41 @@ namespace NDde.Internal.Server
 
         protected virtual void Dispose(bool disposing)
         {
-            if (!IsDisposed)
+            if (IsDisposed) return;
+            IsDisposed = true;
+            if (disposing)
             {
-                IsDisposed = true;
-                if (disposing)
+                if (!IsRegistered) return;
+                // Unregister the service name.
+                RegistrationManager.Unregister(_InstanceId, _ServiceHandle);
+
+                // Unregister this server from the context so that it will not receive DDEML callbacks.
+                _Context.UnregisterServer(this);
+
+                // Indicate that the service name is no longer registered.
+                _ServiceHandle = IntPtr.Zero;
+                _InstanceId = 0;
+
+                // Raise the StateChange event.
+                if (StateChange == null) return;
+                foreach (var handler in StateChange.GetInvocationList())
                 {
-                    if (IsRegistered)
+                    if (handler is not EventHandler eventHandler) continue;
+                    try
                     {
-                        // Unregister the service name.
-                        RegistrationManager.Unregister(_InstanceId, _ServiceHandle);
-
-                        // Unregister this server from the context so that it will not receive DDEML callbacks.
-                        _Context.UnregisterServer(this);
-
-                        // Indicate that the service name is no longer registered.
-                        _ServiceHandle = IntPtr.Zero;
-                        _InstanceId = 0;
-
-                        // Raise the StateChange event.
-                        foreach (EventHandler handler in StateChange.GetInvocationList())
-                            try
-                            {
-                                handler(this, EventArgs.Empty);
-                            }
-                            catch
-                            {
-                                // Swallow any exception that occurs.
-                            }
+                        eventHandler(this, EventArgs.Empty);
                     }
+                    catch
+                    {
+                        // Swallow any exception that occurs.
+                    }
+
                 }
-                else
-                {
-                    if (IsRegistered)
-                        RegistrationManager.Unregister(_InstanceId, _ServiceHandle);
-                }
+            }
+            else
+            {
+                if (IsRegistered)
+                    RegistrationManager.Unregister(_InstanceId, _ServiceHandle);
             }
         }
 
@@ -166,8 +166,7 @@ namespace NDde.Internal.Server
             _Context.RegisterServer(this);
 
             // Raise the StateChange event.
-            if (StateChange != null)
-                StateChange(this, EventArgs.Empty);
+            StateChange?.Invoke(this, EventArgs.Empty);
         }
 
         public virtual void Unregister()
@@ -188,8 +187,7 @@ namespace NDde.Internal.Server
             _InstanceId = 0;
 
             // Raise the StateChange event.
-            if (StateChange != null)
-                StateChange(this, EventArgs.Empty);
+            StateChange?.Invoke(this, EventArgs.Empty);
         }
 
         public virtual void Advise(string topic, string item)
@@ -199,13 +197,13 @@ namespace NDde.Internal.Server
             if (!IsRegistered)
                 throw new InvalidOperationException(Resources.NotRegisteredMessage);
             if (topic == null)
-                throw new ArgumentNullException("topic");
+                throw new ArgumentNullException(nameof(topic));
             if (topic.Length > Ddeml.MAX_STRING_SIZE)
-                throw new ArgumentException(Resources.StringParameterInvalidMessage, "topic");
+                throw new ArgumentException(Resources.StringParameterInvalidMessage, nameof(topic));
             if (item == null)
-                throw new ArgumentNullException("item");
+                throw new ArgumentNullException(nameof(item));
             if (item.Length > Ddeml.MAX_STRING_SIZE)
-                throw new ArgumentException(Resources.StringParameterInvalidMessage, "item");
+                throw new ArgumentException(Resources.StringParameterInvalidMessage, nameof(item));
 
             // Assume the topic name and item name are wild.
             var topicHandle = IntPtr.Zero;
@@ -227,15 +225,13 @@ namespace NDde.Internal.Server
             Ddeml.DdeFreeStringHandle(_InstanceId, topicHandle);
 
             // Check the result to see if the post failed.
-            if (!result)
-            {
-                var error = Ddeml.DdeGetLastError(_InstanceId);
-                var message = Resources.AdviseFailedMessage;
-                message = message.Replace("${service}", _Service);
-                message = message.Replace("${topic}", topic);
-                message = message.Replace("${item}", item);
-                throw new DdemlException(message, error);
-            }
+            if (result) return;
+            var error = Ddeml.DdeGetLastError(_InstanceId);
+            var message = Resources.AdviseFailedMessage;
+            message = message.Replace("${service}", _Service);
+            message = message.Replace("${topic}", topic);
+            message = message.Replace("${item}", item);
+            throw new DdemlException(message, error);
         }
 
         public virtual void Pause(DdemlConversation conversation)
@@ -245,7 +241,7 @@ namespace NDde.Internal.Server
             if (!IsRegistered)
                 throw new InvalidOperationException(Resources.NotRegisteredMessage);
             if (conversation == null)
-                throw new ArgumentNullException("conversation");
+                throw new ArgumentNullException(nameof(conversation));
             if (conversation.IsPaused)
                 throw new InvalidOperationException(Resources.AlreadyPausedMessage);
 
@@ -292,7 +288,7 @@ namespace NDde.Internal.Server
             if (!IsRegistered)
                 throw new InvalidOperationException(Resources.NotRegisteredMessage);
             if (conversation == null)
-                throw new ArgumentNullException("conversation");
+                throw new ArgumentNullException(nameof(conversation));
             if (!conversation.IsPaused)
                 throw new InvalidOperationException(Resources.NotPausedMessage);
 
@@ -339,16 +335,14 @@ namespace NDde.Internal.Server
             if (!IsRegistered)
                 throw new InvalidOperationException(Resources.NotRegisteredMessage);
             if (conversation == null)
-                throw new ArgumentNullException("conversation");
+                throw new ArgumentNullException(nameof(conversation));
 
-            if (_ConversationTable.ContainsKey(conversation.Handle))
-            {
-                // Terminate the conversation.
-                Ddeml.DdeDisconnect(conversation.Handle);
+            if (!_ConversationTable.ContainsKey(conversation.Handle)) return;
+            // Terminate the conversation.
+            Ddeml.DdeDisconnect(conversation.Handle);
 
-                // Remove the Conversation from the conversation table.
-                _ConversationTable.Remove(conversation.Handle);
-            }
+            // Remove the Conversation from the conversation table.
+            _ConversationTable.Remove(conversation.Handle);
         }
 
         public virtual void Disconnect()
@@ -375,12 +369,9 @@ namespace NDde.Internal.Server
             {
                 case Ddeml.XTYP_ADVREQ:
                 {
-                    StringBuilder psz;
-                    int length;
-
                     // Get the topic name from the hsz1 string handle.
-                    psz = new StringBuilder(Ddeml.MAX_STRING_SIZE);
-                    length = Ddeml.DdeQueryString(_InstanceId, t.hsz1, psz, psz.Capacity,
+                    var psz = new StringBuilder(Ddeml.MAX_STRING_SIZE);
+                    var length = Ddeml.DdeQueryString(_InstanceId, t.hsz1, psz, psz.Capacity,
                         Ddeml.CP_WINANSI);
                     var topic = psz.ToString();
 
@@ -414,15 +405,12 @@ namespace NDde.Internal.Server
                         _AdviseRequestCache.Remove(key);
 
                     // Create and return the data handle representing the data being advised.
-                    if (cached != null && cached.Length > 0)
-                    {
-                        t.dwRet = Ddeml.DdeCreateDataHandle(_InstanceId, cached, cached.Length,
-                            0, t.hsz2, t.uFmt, 0);
-                        return true;
-                    }
+                    if (cached == null || cached.Length <= 0) return false;
+                    t.dwRet = Ddeml.DdeCreateDataHandle(_InstanceId, cached, cached.Length,
+                        0, t.hsz2, t.uFmt, 0);
+                    return true;
 
                     // This transaction could not be processed here.
-                    return false;
                 }
                 case Ddeml.XTYP_ADVSTART:
                 {
@@ -512,7 +500,7 @@ namespace NDde.Internal.Server
                     var data = new byte[length];
                     length = Ddeml.DdeGetData(t.hData, data, data.Length, 0);
                     var command = _Context.Encoding.GetString(data, 0, data.Length);
-                    if (command[command.Length - 1] == '\0')
+                    if (command[^1] == '\0')
                         command = command.Substring(0, command.Length - 1);
 
                     // Get the Conversation from the conversation table.
@@ -681,10 +669,10 @@ namespace NDde.Internal.Server
 
         public struct ExecuteResult
         {
-            public static readonly ExecuteResult Processed = new ExecuteResult(Ddeml.DDE_FACK);
-            public static readonly ExecuteResult NotProcessed = new ExecuteResult(Ddeml.DDE_FNOTPROCESSED);
-            public static readonly ExecuteResult TooBusy = new ExecuteResult(Ddeml.DDE_FBUSY);
-            public static readonly ExecuteResult PauseConversation = new ExecuteResult(Ddeml.CBR_BLOCK);
+            public static readonly ExecuteResult Processed = new(Ddeml.DDE_FACK);
+            public static readonly ExecuteResult NotProcessed = new(Ddeml.DDE_FNOTPROCESSED);
+            public static readonly ExecuteResult TooBusy = new(Ddeml.DDE_FBUSY);
+            public static readonly ExecuteResult PauseConversation = new(Ddeml.CBR_BLOCK);
 
             private readonly int _Result;
 
@@ -695,9 +683,8 @@ namespace NDde.Internal.Server
 
             public override bool Equals(object o)
             {
-                if (o is ExecuteResult)
+                if (o is ExecuteResult r)
                 {
-                    var r = (ExecuteResult) o;
                     return _Result == r._Result;
                 }
 
@@ -722,10 +709,10 @@ namespace NDde.Internal.Server
 
         public struct PokeResult
         {
-            public static readonly PokeResult Processed = new PokeResult(Ddeml.DDE_FACK);
-            public static readonly PokeResult NotProcessed = new PokeResult(Ddeml.DDE_FNOTPROCESSED);
-            public static readonly PokeResult TooBusy = new PokeResult(Ddeml.DDE_FBUSY);
-            public static readonly PokeResult PauseConversation = new PokeResult(Ddeml.CBR_BLOCK);
+            public static readonly PokeResult Processed = new(Ddeml.DDE_FACK);
+            public static readonly PokeResult NotProcessed = new(Ddeml.DDE_FNOTPROCESSED);
+            public static readonly PokeResult TooBusy = new(Ddeml.DDE_FBUSY);
+            public static readonly PokeResult PauseConversation = new(Ddeml.CBR_BLOCK);
 
             private readonly int _Result;
 
@@ -736,9 +723,8 @@ namespace NDde.Internal.Server
 
             public override bool Equals(object o)
             {
-                if (o is PokeResult)
+                if (o is PokeResult r)
                 {
-                    var r = (PokeResult) o;
                     return _Result == r._Result;
                 }
 
@@ -763,9 +749,9 @@ namespace NDde.Internal.Server
 
         public struct RequestResult
         {
-            internal static readonly RequestResult Processed = new RequestResult(Ddeml.DDE_FACK);
-            public static readonly RequestResult NotProcessed = new RequestResult(Ddeml.DDE_FNOTPROCESSED);
-            public static readonly RequestResult PauseConversation = new RequestResult(Ddeml.CBR_BLOCK);
+            internal static readonly RequestResult Processed = new(Ddeml.DDE_FACK);
+            public static readonly RequestResult NotProcessed = new(Ddeml.DDE_FNOTPROCESSED);
+            public static readonly RequestResult PauseConversation = new(Ddeml.CBR_BLOCK);
 
             private readonly int _Result;
 
@@ -785,9 +771,8 @@ namespace NDde.Internal.Server
 
             public override bool Equals(object o)
             {
-                if (o is RequestResult)
+                if (o is RequestResult r)
                 {
-                    var r = (RequestResult) o;
                     return _Result == r._Result;
                 }
 
@@ -823,15 +808,13 @@ namespace NDde.Internal.Server
 
             bool IMessageFilter.PreFilterMessage(ref Message m)
             {
-                if (m.Msg == WM_APP + 3)
-                {
-                    // Unregister the service name.
-                    Ddeml.DdeNameService(m.WParam.ToInt32(), m.LParam, IntPtr.Zero,
-                        Ddeml.DNS_UNREGISTER);
+                if (m.Msg != WM_APP + 3) return false;
+                // Unregister the service name.
+                Ddeml.DdeNameService(m.WParam.ToInt32(), m.LParam, IntPtr.Zero,
+                    Ddeml.DNS_UNREGISTER);
 
-                    // Free the service string handle.
-                    Ddeml.DdeFreeStringHandle(m.WParam.ToInt32(), m.LParam);
-                }
+                // Free the service string handle.
+                Ddeml.DdeFreeStringHandle(m.WParam.ToInt32(), m.LParam);
 
                 return false;
             }
@@ -883,29 +866,27 @@ namespace NDde.Internal.Server
                 // thread specific.  A message will be posted to the DDEML thread instead.
                 lock (_Table)
                 {
-                    if (_Table.ContainsKey(serviceHandle))
+                    if (!_Table.ContainsKey(serviceHandle)) return;
+                    // Determine if the current thread matches what is in the table.
+                    var threadId = _Table[serviceHandle];
+                    if (threadId == Ddeml.GetCurrentThreadId())
                     {
-                        // Determine if the current thread matches what is in the table.
-                        var threadId = _Table[serviceHandle];
-                        if (threadId == Ddeml.GetCurrentThreadId())
-                        {
-                            // Unregister the service name.
-                            Ddeml.DdeNameService(instanceId, serviceHandle, IntPtr.Zero,
-                                Ddeml.DNS_UNREGISTER);
+                        // Unregister the service name.
+                        Ddeml.DdeNameService(instanceId, serviceHandle, IntPtr.Zero,
+                            Ddeml.DNS_UNREGISTER);
 
-                            // Free the service string handle.
-                            Ddeml.DdeFreeStringHandle(instanceId, serviceHandle);
-                        }
-                        else
-                        {
-                            // Post a message to the thread that needs to execute the Ddeml.DdeXXX methods.
-                            PostThreadMessage(threadId, WM_APP + 3, new IntPtr(instanceId),
-                                serviceHandle);
-                        }
-
-                        // Remove the service handle from the table because it is no longer in use.
-                        _Table.Remove(serviceHandle);
+                        // Free the service string handle.
+                        Ddeml.DdeFreeStringHandle(instanceId, serviceHandle);
                     }
+                    else
+                    {
+                        // Post a message to the thread that needs to execute the Ddeml.DdeXXX methods.
+                        PostThreadMessage(threadId, WM_APP + 3, new IntPtr(instanceId),
+                            serviceHandle);
+                    }
+
+                    // Remove the service handle from the table because it is no longer in use.
+                    _Table.Remove(serviceHandle);
                 }
             }
         } // class

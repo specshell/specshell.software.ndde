@@ -56,7 +56,7 @@ namespace NDde.Internal.Server
 
         public bool IsPaused => _Waiting > 0;
 
-        public object Tag { get; set; } = null;
+        public object Tag { get; set; }
 
         internal event EventHandler StateChange;
 
@@ -74,15 +74,13 @@ namespace NDde.Internal.Server
         internal void IncrementWaiting()
         {
             _Waiting++;
-            if (StateChange != null)
-                StateChange(this, EventArgs.Empty);
+            StateChange?.Invoke(this, EventArgs.Empty);
         }
 
         internal void DecrementWaiting()
         {
             _Waiting--;
-            if (StateChange != null)
-                StateChange(this, EventArgs.Empty);
+            StateChange?.Invoke(this, EventArgs.Empty);
         }
     } // class
 } // namespace

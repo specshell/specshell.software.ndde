@@ -36,6 +36,7 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
 
 namespace NDde.Internal.Utility
 {
@@ -64,14 +65,9 @@ namespace NDde.Internal.Utility
         public bool TryGetValue(TKey key, out TValue value)
         {
             value = null;
-            if (_Storage.ContainsKey(key))
-            {
-                value = _Storage[key].Target as TValue;
-                if (value != null)
-                    return true;
-            }
-
-            return false;
+            if (!_Storage.ContainsKey(key)) return false;
+            value = _Storage[key].Target as TValue;
+            return value != null;
         }
 
         public ICollection<TValue> Values => new MyValueCollection(this);
@@ -80,12 +76,9 @@ namespace NDde.Internal.Utility
         {
             get
             {
-                if (_Storage.ContainsKey(key))
-                {
-                    var value = _Storage[key].Target as TValue;
-                    if (value != null)
-                        return value;
-                }
+                if (!_Storage.ContainsKey(key)) return null;
+                if (_Storage[key].Target is TValue value)
+                    return value;
 
                 return null;
             }
@@ -106,7 +99,8 @@ namespace NDde.Internal.Utility
         public void Add(KeyValuePair<TKey, TValue> item)
         {
             Purge();
-            _Storage.Add(item.Key, new WeakReference(item.Value));
+            var (key, value) = item;
+            _Storage.Add(key, new WeakReference(value));
         }
 
         public void Clear()
@@ -116,14 +110,9 @@ namespace NDde.Internal.Utility
 
         public bool Contains(KeyValuePair<TKey, TValue> item)
         {
-            if (_Storage.ContainsKey(item.Key))
-            {
-                var value = _Storage[item.Key].Target as TValue;
-                if (value != null)
-                    return true;
-            }
-
-            return false;
+            var (key, _) = item;
+            if (!_Storage.ContainsKey(key)) return false;
+            return _Storage[key].Target is TValue;
         }
 
         public void CopyTo(KeyValuePair<TKey, TValue>[] array, int arrayIndex)
@@ -147,11 +136,10 @@ namespace NDde.Internal.Utility
 
         public IEnumerator<KeyValuePair<TKey, TValue>> GetEnumerator()
         {
-            foreach (var kvp in _Storage)
+            foreach (var (key, weakReference) in _Storage)
             {
-                var value = kvp.Value.Target as TValue;
-                if (value != null)
-                    yield return new KeyValuePair<TKey, TValue>(kvp.Key, value);
+                if (weakReference.Target is TValue value)
+                    yield return new KeyValuePair<TKey, TValue>(key, value);
             }
         }
 
@@ -162,10 +150,7 @@ namespace NDde.Internal.Utility
 
         private void Purge()
         {
-            var dead = new List<TKey>();
-            foreach (var kvp in _Storage)
-                if (!kvp.Value.IsAlive)
-                    dead.Add(kvp.Key);
+            var dead = (from kvp in _Storage where !kvp.Value.IsAlive select kvp.Key).ToList();
             foreach (var key in dead)
                 _Storage.Remove(key);
         }
@@ -191,10 +176,7 @@ namespace NDde.Internal.Utility
 
             public bool Contains(TValue item)
             {
-                foreach (var value in this)
-                    if (value == item)
-                        return true;
-                return false;
+                return this.Any(value => value == item);
             }
 
             public void CopyTo(TValue[] array, int arrayIndex)
@@ -220,8 +202,7 @@ namespace NDde.Internal.Utility
             {
                 foreach (var wr in _Parent._Storage.Values)
                 {
-                    var value = wr.Target as TValue;
-                    if (value != null)
+                    if (wr.Target is TValue value)
                         yield return value;
                 }
             }

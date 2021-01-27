@@ -35,7 +35,6 @@
 
 using System;
 using System.ComponentModel;
-using System.Threading;
 using NDde.Advanced;
 using NDde.Internal;
 using NDde.Internal.Advanced;
@@ -74,15 +73,14 @@ namespace NDde.Server
     ///         </note>
     ///     </para>
     /// </remarks>
-    /// <include file='Documentation/Examples.xml' path='Comment/Member[@name="DdeServer"]/*' />
     public abstract class DdeServer : IDisposable
     {
+        private readonly object _LockObject = new();
         private DdeContext _Context;
 
         private DdemlServer _DdemlObject; // This has lazy initialization through a property.
 
         private bool _IsRegistered; // This is a cached DdemlServer property.
-        private readonly object _LockObject = new object();
         private string _Service = ""; // This is a cached DdemlServer property.
 
 
@@ -160,11 +158,9 @@ namespace NDde.Server
             {
                 lock (_LockObject)
                 {
-                    if (_DdemlObject == null)
-                    {
-                        _DdemlObject = new MyDdemlServer(Service, Context.DdemlObject, this);
-                        _DdemlObject.StateChange += OnStateChange;
-                    }
+                    if (_DdemlObject != null) return _DdemlObject;
+                    _DdemlObject = new MyDdemlServer(Service, Context.DdemlObject, this);
+                    _DdemlObject.StateChange += OnStateChange;
 
                     return _DdemlObject;
                 }
@@ -233,6 +229,7 @@ namespace NDde.Server
         public void Dispose()
         {
             Dispose(true);
+            GC.SuppressFinalize(this);
         }
 
         /// <summary>
@@ -243,18 +240,20 @@ namespace NDde.Server
         /// </param>
         protected virtual void Dispose(bool disposing)
         {
-            if (disposing)
-            {
-                ThreadStart method = delegate { DdemlObject.Dispose(); };
+            if (!disposing) return;
 
-                try
-                {
-                    Context.Invoke(method);
-                }
-                catch
-                {
-                    // Swallow any exception that occurs.
-                }
+            void InnerDispose()
+            {
+                DdemlObject.Dispose();
+            }
+
+            try
+            {
+                Context.Invoke(InnerDispose);
+            }
+            catch
+            {
+                // Swallow any exception that occurs.
             }
         }
 
@@ -269,11 +268,14 @@ namespace NDde.Server
         /// </exception>
         public virtual void Register()
         {
-            ThreadStart method = delegate { DdemlObject.Register(); };
+            void InnerRegister()
+            {
+                DdemlObject.Register();
+            }
 
             try
             {
-                Context.Invoke(method);
+                Context.Invoke(InnerRegister);
             }
             catch (DdemlException e)
             {
@@ -293,11 +295,14 @@ namespace NDde.Server
         /// </exception>
         public virtual void Unregister()
         {
-            ThreadStart method = delegate { DdemlObject.Unregister(); };
+            void InnerUnregister()
+            {
+                DdemlObject.Unregister();
+            }
 
             try
             {
-                Context.Invoke(method);
+                Context.Invoke(InnerUnregister);
             }
             catch (DdemlException e)
             {
@@ -335,11 +340,14 @@ namespace NDde.Server
         /// </remarks>
         public virtual void Advise(string topic, string item)
         {
-            ThreadStart method = delegate { DdemlObject.Advise(topic, item); };
+            void InnerAdvise()
+            {
+                DdemlObject.Advise(topic, item);
+            }
 
             try
             {
-                Context.Invoke(method);
+                Context.Invoke(InnerAdvise);
             }
             catch (DdemlException e)
             {
@@ -375,11 +383,14 @@ namespace NDde.Server
         /// </exception>
         public virtual void Pause(DdeConversation conversation)
         {
-            ThreadStart method = delegate { DdemlObject.Pause(conversation.DdemlObject); };
+            void InnerPause()
+            {
+                DdemlObject.Pause(conversation.DdemlObject);
+            }
 
             try
             {
-                Context.Invoke(method);
+                Context.Invoke(InnerPause);
             }
             catch (DdemlException e)
             {
@@ -405,11 +416,14 @@ namespace NDde.Server
         /// </remarks>
         public virtual void Pause()
         {
-            ThreadStart method = delegate { DdemlObject.Pause(); };
+            void InnerPause()
+            {
+                DdemlObject.Pause();
+            }
 
             try
             {
-                Context.Invoke(method);
+                Context.Invoke(InnerPause);
             }
             catch (DdemlException e)
             {
@@ -442,11 +456,14 @@ namespace NDde.Server
         /// </exception>
         public virtual void Resume(DdeConversation conversation)
         {
-            ThreadStart method = delegate { DdemlObject.Resume(conversation.DdemlObject); };
+            void InnerResume()
+            {
+                DdemlObject.Resume(conversation.DdemlObject);
+            }
 
             try
             {
-                Context.Invoke(method);
+                Context.Invoke(InnerResume);
             }
             catch (DdemlException e)
             {
@@ -469,11 +486,14 @@ namespace NDde.Server
         /// </exception>
         public virtual void Resume()
         {
-            ThreadStart method = delegate { DdemlObject.Resume(); };
+            void InnerResume()
+            {
+                DdemlObject.Resume();
+            }
 
             try
             {
-                Context.Invoke(method);
+                Context.Invoke(InnerResume);
             }
             catch (DdemlException e)
             {
@@ -506,11 +526,14 @@ namespace NDde.Server
         /// </exception>
         public virtual void Disconnect(DdeConversation conversation)
         {
-            ThreadStart method = delegate { DdemlObject.Disconnect(conversation.DdemlObject); };
+            void InnerDisconnect()
+            {
+                DdemlObject.Disconnect(conversation.DdemlObject);
+            }
 
             try
             {
-                Context.Invoke(method);
+                Context.Invoke(InnerDisconnect);
             }
             catch (DdemlException e)
             {
@@ -533,11 +556,14 @@ namespace NDde.Server
         /// </exception>
         public virtual void Disconnect()
         {
-            ThreadStart method = delegate { DdemlObject.Disconnect(); };
+            void InnerDisconnect()
+            {
+                DdemlObject.Disconnect();
+            }
 
             try
             {
-                Context.Invoke(method);
+                Context.Invoke(InnerDisconnect);
             }
             catch (DdemlException e)
             {
@@ -736,19 +762,19 @@ namespace NDde.Server
             ///     Return this value if the command was executed successfully.
             /// </summary>
             public static readonly ExecuteResult Processed =
-                new ExecuteResult(DdemlServer.ExecuteResult.Processed);
+                new(DdemlServer.ExecuteResult.Processed);
 
             /// <summary>
             ///     Return this value if the command was not executed successfully.
             /// </summary>
             public static readonly ExecuteResult NotProcessed =
-                new ExecuteResult(DdemlServer.ExecuteResult.NotProcessed);
+                new(DdemlServer.ExecuteResult.NotProcessed);
 
             /// <summary>
             ///     Return this value if the server is too busy.
             /// </summary>
             public static readonly ExecuteResult TooBusy =
-                new ExecuteResult(DdemlServer.ExecuteResult.TooBusy);
+                new(DdemlServer.ExecuteResult.TooBusy);
 
             /// <summary>
             ///     Return this value to pause the conversation and execute the command asynchronously.  After the conversation has
@@ -756,7 +782,7 @@ namespace NDde.Server
             ///     <c>OnExecute</c> method will run again.
             /// </summary>
             public static readonly ExecuteResult PauseConversation =
-                new ExecuteResult(DdemlServer.ExecuteResult.PauseConversation);
+                new(DdemlServer.ExecuteResult.PauseConversation);
 
             private DdemlServer.ExecuteResult _DdemlObject;
 
@@ -776,9 +802,8 @@ namespace NDde.Server
             /// </returns>
             public override bool Equals(object o)
             {
-                if (o is ExecuteResult)
+                if (o is ExecuteResult r)
                 {
-                    var r = (ExecuteResult) o;
                     return _DdemlObject == r._DdemlObject;
                 }
 
@@ -837,18 +862,18 @@ namespace NDde.Server
             /// <summary>
             ///     Return this value if the poke was successful.
             /// </summary>
-            public static readonly PokeResult Processed = new PokeResult(DdemlServer.PokeResult.Processed);
+            public static readonly PokeResult Processed = new(DdemlServer.PokeResult.Processed);
 
             /// <summary>
             ///     Return this value if the poke was not successful.
             /// </summary>
             public static readonly PokeResult NotProcessed =
-                new PokeResult(DdemlServer.PokeResult.NotProcessed);
+                new(DdemlServer.PokeResult.NotProcessed);
 
             /// <summary>
             ///     Return this value if the server is too busy.
             /// </summary>
-            public static readonly PokeResult TooBusy = new PokeResult(DdemlServer.PokeResult.TooBusy);
+            public static readonly PokeResult TooBusy = new(DdemlServer.PokeResult.TooBusy);
 
             /// <summary>
             ///     Return this value to pause the conversation and execute the poke asynchronously.  After the conversation has been
@@ -856,7 +881,7 @@ namespace NDde.Server
             ///     <c>OnPoke</c> method will run again.
             /// </summary>
             public static readonly PokeResult PauseConversation =
-                new PokeResult(DdemlServer.PokeResult.PauseConversation);
+                new(DdemlServer.PokeResult.PauseConversation);
 
             private DdemlServer.PokeResult _DdemlObject;
 
@@ -876,9 +901,8 @@ namespace NDde.Server
             /// </returns>
             public override bool Equals(object o)
             {
-                if (o is PokeResult)
+                if (o is PokeResult r)
                 {
-                    var r = (PokeResult) o;
                     return _DdemlObject == r._DdemlObject;
                 }
 
@@ -935,13 +959,13 @@ namespace NDde.Server
         public struct RequestResult
         {
             internal static readonly RequestResult Processed =
-                new RequestResult(DdemlServer.RequestResult.Processed);
+                new(DdemlServer.RequestResult.Processed);
 
             /// <summary>
             ///     Return this value if the request was not successful.
             /// </summary>
             public static readonly RequestResult NotProcessed =
-                new RequestResult(DdemlServer.RequestResult.NotProcessed);
+                new(DdemlServer.RequestResult.NotProcessed);
 
             /// <summary>
             ///     Return this value to pause the conversation and execute the request asynchronously.  After the conversation has
@@ -949,7 +973,7 @@ namespace NDde.Server
             ///     <c>OnRequest</c> method will run again.
             /// </summary>
             public static readonly RequestResult PauseConversation =
-                new RequestResult(DdemlServer.RequestResult.PauseConversation);
+                new(DdemlServer.RequestResult.PauseConversation);
 
             private DdemlServer.RequestResult _DdemlObject;
 
@@ -990,9 +1014,8 @@ namespace NDde.Server
             /// </returns>
             public override bool Equals(object o)
             {
-                if (o is RequestResult)
+                if (o is RequestResult r)
                 {
-                    var r = (RequestResult) o;
                     return _DdemlObject == r._DdemlObject;
                 }
 

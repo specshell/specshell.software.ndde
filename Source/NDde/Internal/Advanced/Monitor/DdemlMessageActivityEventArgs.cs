@@ -42,7 +42,7 @@ namespace NDde.Internal.Advanced.Monitor
     {
         Post,
 
-        Send
+        Send,
     } // enum
 
     internal sealed class DdemlMessageActivityEventArgs : DdemlActivityEventArgs

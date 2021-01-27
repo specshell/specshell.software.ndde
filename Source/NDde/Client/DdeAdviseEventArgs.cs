@@ -76,14 +76,6 @@ namespace NDde.Client
         /// <summary>
         ///     This gets the text associated with this notification or null if this is not a hot advise loop.
         /// </summary>
-        public string Text
-        {
-            get
-            {
-                if (_DdemlObject.Data != null)
-                    return _Encoding.GetString(_DdemlObject.Data);
-                return null;
-            }
-        }
+        public string Text => _DdemlObject.Data != null ? _Encoding.GetString(_DdemlObject.Data) : null;
     } // class
 } // namespace

@@ -104,9 +104,7 @@ namespace NDde.Advanced
         /// </returns>
         object ISynchronizeInvoke.Invoke(Delegate method, object[] args)
         {
-            if (Thread.VolatileRead(ref _ThreadId) != GetCurrentThreadId())
-                return _Form.Invoke(method, args);
-            return method.DynamicInvoke(args);
+            return Thread.VolatileRead(ref _ThreadId) != GetCurrentThreadId() ? _Form.Invoke(method, args) : method.DynamicInvoke(args);
         }
 
         /// <summary>
@@ -167,13 +165,10 @@ namespace NDde.Advanced
 
             private void HiddenForm_Load(object source, EventArgs e)
             {
-                if (Environment.OSVersion.Platform == PlatformID.Win32NT &&
-                    Environment.OSVersion.Version.Major >= 5)
-                {
-                    // Make this a message only window if the OS is WinXP or higher.
-                    const int HWND_MESSAGE = -1;
-                    SetParent(Handle, new IntPtr(HWND_MESSAGE));
-                }
+                if (Environment.OSVersion.Platform != PlatformID.Win32NT || Environment.OSVersion.Version.Major < 5) return;
+                // Make this a message only window if the OS is WinXP or higher.
+                const int HWND_MESSAGE = -1;
+                SetParent(Handle, new IntPtr(HWND_MESSAGE));
             }
         } // class
     } // class

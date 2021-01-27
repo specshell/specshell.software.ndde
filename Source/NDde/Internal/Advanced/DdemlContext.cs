@@ -35,6 +35,7 @@
 
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
@@ -49,20 +50,20 @@ namespace NDde.Internal.Advanced
     internal sealed class DdemlContext : IDisposable
     {
         private static readonly WeakReferenceDictionary<int, DdemlContext> _Instances =
-            new WeakReferenceDictionary<int, DdemlContext>();
+            new();
 
         private readonly Ddeml.DdeCallback _Callback; // DDEML callback function
 
         private readonly WeakReferenceDictionary<IntPtr, DdemlClient> _ClientTable =
-            new WeakReferenceDictionary<IntPtr, DdemlClient>(); // Active clients by conversation
+            new(); // Active clients by conversation
 
-        private readonly List<IDdemlTransactionFilter> _Filters = new List<IDdemlTransactionFilter>(); // ITransactionFilter objects
+        private readonly List<IDdemlTransactionFilter> _Filters = new(); // ITransactionFilter objects
 
         private readonly WeakReferenceDictionary<IntPtr, DdemlServer> _ServerTable1 =
-            new WeakReferenceDictionary<IntPtr, DdemlServer>(); // Active servers by conversation
+            new(); // Active servers by conversation
 
         private readonly WeakReferenceDictionary<string, DdemlServer> _ServerTable2 =
-            new WeakReferenceDictionary<string, DdemlServer>(); // Active servers by service
+            new(); // Active servers by service
 
         public DdemlContext()
         {
@@ -89,11 +90,9 @@ namespace NDde.Internal.Advanced
             lock (_Instances)
             {
                 var context = _Instances[Ddeml.GetCurrentThreadId()];
-                if (context == null)
-                {
-                    context = new DdemlContext();
-                    _Instances.Add(Ddeml.GetCurrentThreadId(), context);
-                }
+                if (context != null) return context;
+                context = new DdemlContext();
+                _Instances.Add(Ddeml.GetCurrentThreadId(), context);
 
                 return context;
             }
@@ -112,40 +111,40 @@ namespace NDde.Internal.Advanced
 
         private void Dispose(bool disposing)
         {
-            if (!IsDisposed)
+            if (IsDisposed) return;
+            IsDisposed = true;
+            if (disposing)
             {
-                IsDisposed = true;
-                if (disposing)
-                {
-                    // Dispose all clients.
-                    foreach (var client in _ClientTable.Values)
-                        client.Dispose();
+                // Dispose all clients.
+                foreach (var client in _ClientTable.Values)
+                    client.Dispose();
 
-                    // Dispose all servers.
-                    foreach (var server in _ServerTable2.Values)
-                        server.Dispose();
+                // Dispose all servers.
+                foreach (var server in _ServerTable2.Values)
+                    server.Dispose();
 
-                    // Raise the StateChange event.
-                    foreach (EventHandler handler in StateChange.GetInvocationList())
+                // Raise the StateChange event.
+                if (StateChange != null)
+                    foreach (var handler in StateChange.GetInvocationList())
+                    {
+                        if (handler is not EventHandler eventHandler) continue;
                         try
                         {
-                            handler(this, EventArgs.Empty);
+                            eventHandler(this, EventArgs.Empty);
                         }
                         catch
                         {
                             // Swallow any exception that occurs.
                         }
-                }
-
-                if (IsInitialized)
-                {
-                    // Uninitialize this DDEML instance.
-                    InstanceManager.Uninitialize(InstanceId);
-
-                    // Indicate that this object is no longer initialized.
-                    InstanceId = 0;
-                }
+                    }
             }
+
+            if (!IsInitialized) return;
+            // Uninitialize this DDEML instance.
+            InstanceManager.Uninitialize(InstanceId);
+
+            // Indicate that this object is no longer initialized.
+            InstanceId = 0;
         }
 
         public void Initialize()
@@ -158,8 +157,7 @@ namespace NDde.Internal.Advanced
             Initialize(Ddeml.APPCLASS_STANDARD);
 
             // Raise the StateChange event.
-            if (StateChange != null)
-                StateChange(this, EventArgs.Empty);
+            StateChange?.Invoke(this, EventArgs.Empty);
         }
 
         public void AddTransactionFilter(IDdemlTransactionFilter filter)
@@ -167,7 +165,7 @@ namespace NDde.Internal.Advanced
             if (IsDisposed)
                 throw new ObjectDisposedException(GetType().ToString());
             if (filter == null)
-                throw new ArgumentNullException("filter");
+                throw new ArgumentNullException(nameof(filter));
             if (_Filters.Contains(filter))
                 throw new InvalidOperationException(Resources.FilterAlreadyAddedMessage);
 
@@ -179,7 +177,7 @@ namespace NDde.Internal.Advanced
             if (IsDisposed)
                 throw new ObjectDisposedException(GetType().ToString());
             if (filter == null)
-                throw new ArgumentNullException("filter");
+                throw new ArgumentNullException(nameof(filter));
             if (!_Filters.Contains(filter))
                 throw new InvalidOperationException(Resources.FilterNotAddedMessage);
 
@@ -192,11 +190,9 @@ namespace NDde.Internal.Advanced
             InstanceId = InstanceManager.Initialize(_Callback, afCmd);
 
             // If the instance identifier is null then the DDEML could not be initialized.
-            if (InstanceId == 0)
-            {
-                var error = Ddeml.DdeGetLastError(InstanceId);
-                throw new DdemlException(Resources.InitializeFailedMessage, error);
-            }
+            if (InstanceId != 0) return;
+            var error = Ddeml.DdeGetLastError(InstanceId);
+            throw new DdemlException(Resources.InitializeFailedMessage, error);
         }
 
         internal void RegisterClient(DdemlClient client)
@@ -226,9 +222,10 @@ namespace NDde.Internal.Advanced
             var t = new DdemlTransaction(uType, uFmt, hConv, hsz1, hsz2, hData, dwData1, dwData2);
 
             // Run each transaction filter.
-            foreach (var filter in _Filters)
-                if (filter.PreFilterTransaction(t))
-                    return t.dwRet;
+            if (_Filters.Any(filter => filter.PreFilterTransaction(t)))
+            {
+                return t.dwRet;
+            }
 
             // Dispatch the transaction.
             switch (uType)
@@ -368,33 +365,29 @@ namespace NDde.Internal.Advanced
                 }
                 case Ddeml.XTYP_REGISTER:
                 {
-                    if (Register != null)
-                    {
-                        // Get the service name from the hsz1 string handle.
-                        var psz = new StringBuilder(Ddeml.MAX_STRING_SIZE);
-                        var length =
-                            Ddeml.DdeQueryString(InstanceId, hsz1, psz, psz.Capacity,
-                                Ddeml.CP_WINANSI);
-                        var service = psz.ToString();
+                    if (Register == null) return IntPtr.Zero;
+                    // Get the service name from the hsz1 string handle.
+                    var psz = new StringBuilder(Ddeml.MAX_STRING_SIZE);
+                    var length =
+                        Ddeml.DdeQueryString(InstanceId, hsz1, psz, psz.Capacity,
+                            Ddeml.CP_WINANSI);
+                    var service = psz.ToString();
 
-                        Register(this, new DdemlRegistrationEventArgs(service));
-                    }
+                    Register(this, new DdemlRegistrationEventArgs(service));
 
                     return IntPtr.Zero;
                 }
                 case Ddeml.XTYP_UNREGISTER:
                 {
-                    if (Unregister != null)
-                    {
-                        // Get the service name from the hsz1 string handle.
-                        var psz = new StringBuilder(Ddeml.MAX_STRING_SIZE);
-                        var length =
-                            Ddeml.DdeQueryString(InstanceId, hsz1, psz, psz.Capacity,
-                                Ddeml.CP_WINANSI);
-                        var service = psz.ToString();
+                    if (Unregister == null) return IntPtr.Zero;
+                    // Get the service name from the hsz1 string handle.
+                    var psz = new StringBuilder(Ddeml.MAX_STRING_SIZE);
+                    var length =
+                        Ddeml.DdeQueryString(InstanceId, hsz1, psz, psz.Capacity,
+                            Ddeml.CP_WINANSI);
+                    var service = psz.ToString();
 
-                        Unregister(this, new DdemlRegistrationEventArgs(service));
-                    }
+                    Unregister(this, new DdemlRegistrationEventArgs(service));
 
                     return IntPtr.Zero;
                 }
@@ -433,20 +426,18 @@ namespace NDde.Internal.Advanced
                     var instanceId = 0;
                     Ddeml.DdeInitialize(ref instanceId, pfnCallback, afCmd, 0);
 
-                    if (instanceId != 0)
+                    if (instanceId == 0) return instanceId;
+                    // Make sure this thread has an IMessageFilter on it.
+                    var slot = Thread.GetNamedDataSlot(DataSlot);
+                    if (Thread.GetData(slot) == null)
                     {
-                        // Make sure this thread has an IMessageFilter on it.
-                        var slot = Thread.GetNamedDataSlot(DataSlot);
-                        if (Thread.GetData(slot) == null)
-                        {
-                            var filter = new InstanceManager();
-                            Application.AddMessageFilter(filter);
-                            Thread.SetData(slot, filter);
-                        }
-
-                        // Add an entry to the table that maps the instance identifier to the current thread.
-                        _Table.Add(instanceId, Ddeml.GetCurrentThreadId());
+                        var filter = new InstanceManager();
+                        Application.AddMessageFilter(filter);
+                        Thread.SetData(slot, filter);
                     }
+
+                    // Add an entry to the table that maps the instance identifier to the current thread.
+                    _Table.Add(instanceId, Ddeml.GetCurrentThreadId());
 
                     return instanceId;
                 }
@@ -458,19 +449,17 @@ namespace NDde.Internal.Advanced
                 // thread specific.  A message will be posted to the DDEML thread instead.
                 lock (_Table)
                 {
-                    if (_Table.ContainsKey(instanceId))
-                    {
-                        // Determine if the current thread matches what is in the table.
-                        var threadId = _Table[instanceId];
-                        if (threadId == Ddeml.GetCurrentThreadId())
-                            Ddeml.DdeUninitialize(instanceId);
-                        else
-                            PostThreadMessage(threadId, WM_APP + 1, new IntPtr(instanceId),
-                                IntPtr.Zero);
+                    if (!_Table.ContainsKey(instanceId)) return;
+                    // Determine if the current thread matches what is in the table.
+                    var threadId = _Table[instanceId];
+                    if (threadId == Ddeml.GetCurrentThreadId())
+                        Ddeml.DdeUninitialize(instanceId);
+                    else
+                        PostThreadMessage(threadId, WM_APP + 1, new IntPtr(instanceId),
+                            IntPtr.Zero);
 
-                        // Remove the instance identifier from the table because it is no longer in use.
-                        _Table.Remove(instanceId);
-                    }
+                    // Remove the instance identifier from the table because it is no longer in use.
+                    _Table.Remove(instanceId);
                 }
             }
         } // class

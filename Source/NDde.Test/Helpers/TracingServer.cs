@@ -30,7 +30,7 @@ namespace NDde.Test.Helpers
             Console.WriteLine("OnAfterConnect:".PadRight(16)
                               + " Service='" + conversation.Service + "'"
                               + " Topic='" + conversation.Topic + "'"
-                              + " Handle=" + conversation.Handle.ToString());
+                              + " Handle=" + conversation.Handle);
         }
 
         protected override void OnDisconnect(DdeConversation conversation)
@@ -38,7 +38,7 @@ namespace NDde.Test.Helpers
             Console.WriteLine("OnDisconnect:".PadRight(16)
                               + " Service='" + conversation.Service + "'"
                               + " Topic='" + conversation.Topic + "'"
-                              + " Handle=" + conversation.Handle.ToString());
+                              + " Handle=" + conversation.Handle);
         }
 
         protected override bool OnStartAdvise(DdeConversation conversation, string item, int format)
@@ -46,9 +46,9 @@ namespace NDde.Test.Helpers
             Console.WriteLine("OnStartAdvise:".PadRight(16)
                               + " Service='" + conversation.Service + "'"
                               + " Topic='" + conversation.Topic + "'"
-                              + " Handle=" + conversation.Handle.ToString()
+                              + " Handle=" + conversation.Handle
                               + " Item='" + item + "'"
-                              + " Format=" + format.ToString());
+                              + " Format=" + format);
 
             return base.OnStartAdvise(conversation, item, format);
         }
@@ -58,7 +58,7 @@ namespace NDde.Test.Helpers
             Console.WriteLine("OnStopAdvise:".PadRight(16)
                               + " Service='" + conversation.Service + "'"
                               + " Topic='" + conversation.Topic + "'"
-                              + " Handle=" + conversation.Handle.ToString()
+                              + " Handle=" + conversation.Handle
                               + " Item='" + item + "'");
         }
 
@@ -67,7 +67,7 @@ namespace NDde.Test.Helpers
             Console.WriteLine("OnExecute:".PadRight(16)
                               + " Service='" + conversation.Service + "'"
                               + " Topic='" + conversation.Topic + "'"
-                              + " Handle=" + conversation.Handle.ToString()
+                              + " Handle=" + conversation.Handle
                               + " Command='" + command + "'");
 
             return base.OnExecute(conversation, command);
@@ -78,10 +78,10 @@ namespace NDde.Test.Helpers
             Console.WriteLine("OnPoke:".PadRight(16)
                               + " Service='" + conversation.Service + "'"
                               + " Topic='" + conversation.Topic + "'"
-                              + " Handle=" + conversation.Handle.ToString()
+                              + " Handle=" + conversation.Handle
                               + " Item='" + item + "'"
-                              + " Data=" + data.Length.ToString()
-                              + " Format=" + format.ToString());
+                              + " Data=" + data.Length
+                              + " Format=" + format);
 
             return base.OnPoke(conversation, item, data, format);
         }
@@ -91,9 +91,9 @@ namespace NDde.Test.Helpers
             Console.WriteLine("OnRequest:".PadRight(16)
                               + " Service='" + conversation.Service + "'"
                               + " Topic='" + conversation.Topic + "'"
-                              + " Handle=" + conversation.Handle.ToString()
+                              + " Handle=" + conversation.Handle
                               + " Item='" + item + "'"
-                              + " Format=" + format.ToString());
+                              + " Format=" + format);
 
             return base.OnRequest(conversation, item, format);
         }
@@ -104,7 +104,7 @@ namespace NDde.Test.Helpers
                               + " Service='" + Service + "'"
                               + " Topic='" + topic + "'"
                               + " Item='" + item + "'"
-                              + " Format=" + format.ToString());
+                              + " Format=" + format);
 
             return base.OnAdvise(topic, item, format);
         }

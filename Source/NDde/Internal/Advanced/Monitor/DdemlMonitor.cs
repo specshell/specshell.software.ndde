@@ -53,7 +53,7 @@ namespace NDde.Internal.Advanced.Monitor
 
         Link = Ddeml.MF_LINKS,
 
-        Message = Ddeml.MF_POSTMSGS | Ddeml.MF_SENDMSGS
+        Message = Ddeml.MF_POSTMSGS | Ddeml.MF_SENDMSGS,
     } // enum
 
     internal sealed class DdemlMonitor : IDisposable
@@ -85,12 +85,10 @@ namespace NDde.Internal.Advanced.Monitor
 
         private void Dispose(bool disposing)
         {
-            if (!_Disposed)
-            {
-                _Disposed = true;
-                if (disposing)
-                    _Context.Dispose();
-            }
+            if (_Disposed) return;
+            _Disposed = true;
+            if (disposing)
+                _Context.Dispose();
         }
 
         public void Start(DdemlMonitorFlags flags)
@@ -113,18 +111,14 @@ namespace NDde.Internal.Advanced.Monitor
                 mon.dwRet,
                 mon.hTask);
 
-            if (CallbackActivity != null)
-                CallbackActivity(this, args);
+            CallbackActivity?.Invoke(this, args);
         }
 
         private void OnConversation(Ddeml.MONCONVSTRUCT mon)
         {
-            StringBuilder psz;
-            int length;
-
             // Get the service name from the hszSvc string handle.
-            psz = new StringBuilder(Ddeml.MAX_STRING_SIZE);
-            length = Ddeml.DdeQueryString(_Context.InstanceId, mon.hszSvc, psz, psz.Capacity,
+            var psz = new StringBuilder(Ddeml.MAX_STRING_SIZE);
+            var length = Ddeml.DdeQueryString(_Context.InstanceId, mon.hszSvc, psz, psz.Capacity,
                 Ddeml.CP_WINANSI);
             var service = psz.ToString();
 
@@ -142,26 +136,21 @@ namespace NDde.Internal.Advanced.Monitor
                 mon.hConvServer,
                 mon.hTask);
 
-            if (ConversationActivity != null)
-                ConversationActivity(this, args);
+            ConversationActivity?.Invoke(this, args);
         }
 
         private void OnError(Ddeml.MONERRSTRUCT mon)
         {
             var args = new DdemlErrorActivityEventArgs(mon.wLastError, mon.hTask);
 
-            if (ErrorActivity != null)
-                ErrorActivity(this, args);
+            ErrorActivity?.Invoke(this, args);
         }
 
         private void OnLink(Ddeml.MONLINKSTRUCT mon)
         {
-            StringBuilder psz;
-            int length;
-
             // Get the service name from the hszSvc string handle.
-            psz = new StringBuilder(Ddeml.MAX_STRING_SIZE);
-            length = Ddeml.DdeQueryString(_Context.InstanceId, mon.hszSvc, psz, psz.Capacity,
+            var psz = new StringBuilder(Ddeml.MAX_STRING_SIZE);
+            var length = Ddeml.DdeQueryString(_Context.InstanceId, mon.hszSvc, psz, psz.Capacity,
                 Ddeml.CP_WINANSI);
             var service = psz.ToString();
 
@@ -189,36 +178,25 @@ namespace NDde.Internal.Advanced.Monitor
                 mon.hConvServer,
                 mon.hTask);
 
-            if (LinkActivity != null)
-                LinkActivity(this, args);
+            LinkActivity?.Invoke(this, args);
         }
 
         private void OnPost(Ddeml.MONMSGSTRUCT mon)
         {
-            var m = new Message();
-            m.HWnd = mon.hwndTo;
-            m.Msg = mon.wMsg;
-            m.LParam = mon.lParam;
-            m.WParam = mon.wParam;
+            var m = new Message {HWnd = mon.hwndTo, Msg = mon.wMsg, LParam = mon.lParam, WParam = mon.wParam};
 
             var args = new DdemlMessageActivityEventArgs(DdemlMessageActivityKind.Post, m, mon.hTask);
 
-            if (MessageActivity != null)
-                MessageActivity(this, args);
+            MessageActivity?.Invoke(this, args);
         }
 
         private void OnSend(Ddeml.MONMSGSTRUCT mon)
         {
-            var m = new Message();
-            m.HWnd = mon.hwndTo;
-            m.Msg = mon.wMsg;
-            m.LParam = mon.lParam;
-            m.WParam = mon.wParam;
+            var m = new Message {HWnd = mon.hwndTo, Msg = mon.wMsg, LParam = mon.lParam, WParam = mon.wParam};
 
             var args = new DdemlMessageActivityEventArgs(DdemlMessageActivityKind.Send, m, mon.hTask);
 
-            if (MessageActivity != null)
-                MessageActivity(this, args);
+            MessageActivity?.Invoke(this, args);
         }
 
         private void OnString(Ddeml.MONHSZSTRUCT mon)
@@ -230,27 +208,18 @@ namespace NDde.Internal.Advanced.Monitor
                 Ddeml.CP_WINANSI);
             var str = psz.ToString();
 
-            var action = DdemlStringActivityType.CleanUp;
-            switch (mon.fsAction)
+            var action = mon.fsAction switch
             {
-                case Ddeml.MH_CLEANUP:
-                    action = DdemlStringActivityType.CleanUp;
-                    break;
-                case Ddeml.MH_CREATE:
-                    action = DdemlStringActivityType.Create;
-                    break;
-                case Ddeml.MH_DELETE:
-                    action = DdemlStringActivityType.Delete;
-                    break;
-                case Ddeml.MH_KEEP:
-                    action = DdemlStringActivityType.Keep;
-                    break;
-            }
+                Ddeml.MH_CLEANUP => DdemlStringActivityType.CleanUp,
+                Ddeml.MH_CREATE => DdemlStringActivityType.Create,
+                Ddeml.MH_DELETE => DdemlStringActivityType.Delete,
+                Ddeml.MH_KEEP => DdemlStringActivityType.Keep,
+                _ => DdemlStringActivityType.CleanUp
+            };
 
             var args = new DdemlStringActivityEventArgs(str, action, mon.hTask);
 
-            if (StringActivity != null)
-                StringActivity(this, args);
+            StringActivity?.Invoke(this, args);
         }
 
         private sealed class TransactionFilter : IDdemlTransactionFilter
@@ -264,87 +233,63 @@ namespace NDde.Internal.Advanced.Monitor
 
             public bool PreFilterTransaction(DdemlTransaction t)
             {
-                if (t.uType == Ddeml.XTYP_MONITOR)
-                    switch (t.dwData2.ToInt32())
+                if (t.uType != Ddeml.XTYP_MONITOR) return true;
+                var length = 0;
+                var phData = Ddeml.DdeAccessData(t.hData, ref length);
+                Ddeml.DdeUnaccessData(t.hData);
+                switch (t.dwData2.ToInt32())
+                {
+                    case Ddeml.MF_CALLBACKS:
                     {
-                        case Ddeml.MF_CALLBACKS:
-                        {
-                            // Get the MONCBSTRUCT object.
-                            var length = 0;
-                            var phData = Ddeml.DdeAccessData(t.hData, ref length);
-                            var mon = (Ddeml.MONCBSTRUCT) Marshal.PtrToStructure(phData,
-                                typeof(Ddeml.MONCBSTRUCT));
-                            Ddeml.DdeUnaccessData(t.hData);
-                            _Parent.OnCallback(mon);
-                            break;
-                        }
-                        case Ddeml.MF_CONV:
-                        {
-                            // Get the MONCONVSTRUCT object.
-                            var length = 0;
-                            var phData = Ddeml.DdeAccessData(t.hData, ref length);
-                            var mon = (Ddeml.MONCONVSTRUCT) Marshal.PtrToStructure(phData,
-                                typeof(Ddeml.MONCONVSTRUCT));
-                            Ddeml.DdeUnaccessData(t.hData);
-                            _Parent.OnConversation(mon);
-                            break;
-                        }
-                        case Ddeml.MF_ERRORS:
-                        {
-                            // Get the MONERRSTRUCT object.
-                            var length = 0;
-                            var phData = Ddeml.DdeAccessData(t.hData, ref length);
-                            var mon = (Ddeml.MONERRSTRUCT) Marshal.PtrToStructure(phData,
-                                typeof(Ddeml.MONERRSTRUCT));
-                            Ddeml.DdeUnaccessData(t.hData);
-                            _Parent.OnError(mon);
-                            break;
-                        }
-                        case Ddeml.MF_HSZ_INFO:
-                        {
-                            // Get the MONHSZSTRUCT object.
-                            var length = 0;
-                            var phData = Ddeml.DdeAccessData(t.hData, ref length);
-                            var mon = (Ddeml.MONHSZSTRUCT) Marshal.PtrToStructure(phData,
-                                typeof(Ddeml.MONHSZSTRUCT));
-                            Ddeml.DdeUnaccessData(t.hData);
-                            _Parent.OnString(mon);
-                            break;
-                        }
-                        case Ddeml.MF_LINKS:
-                        {
-                            // Get the MONLINKSTRUCT object.
-                            var length = 0;
-                            var phData = Ddeml.DdeAccessData(t.hData, ref length);
-                            var mon = (Ddeml.MONLINKSTRUCT) Marshal.PtrToStructure(phData,
-                                typeof(Ddeml.MONLINKSTRUCT));
-                            Ddeml.DdeUnaccessData(t.hData);
-                            _Parent.OnLink(mon);
-                            break;
-                        }
-                        case Ddeml.MF_POSTMSGS:
-                        {
-                            // Get the MONMSGSTRUCT object.
-                            var length = 0;
-                            var phData = Ddeml.DdeAccessData(t.hData, ref length);
-                            var mon = (Ddeml.MONMSGSTRUCT) Marshal.PtrToStructure(phData,
-                                typeof(Ddeml.MONMSGSTRUCT));
-                            Ddeml.DdeUnaccessData(t.hData);
-                            _Parent.OnPost(mon);
-                            break;
-                        }
-                        case Ddeml.MF_SENDMSGS:
-                        {
-                            // Get the MONMSGSTRUCT object.
-                            var length = 0;
-                            var phData = Ddeml.DdeAccessData(t.hData, ref length);
-                            var mon = (Ddeml.MONMSGSTRUCT) Marshal.PtrToStructure(phData,
-                                typeof(Ddeml.MONMSGSTRUCT));
-                            Ddeml.DdeUnaccessData(t.hData);
-                            _Parent.OnSend(mon);
-                            break;
-                        }
+                        // Get the MONCBSTRUCT object.
+                        var mon = Marshal.PtrToStructure<Ddeml.MONCBSTRUCT>(phData);
+
+                        _Parent.OnCallback(mon);
+                        break;
                     }
+                    case Ddeml.MF_CONV:
+                    {
+                        // Get the MONCONVSTRUCT object.
+                        var mon = Marshal.PtrToStructure<Ddeml.MONCONVSTRUCT>(phData);
+                        _Parent.OnConversation(mon);
+                        break;
+                    }
+                    case Ddeml.MF_ERRORS:
+                    {
+                        // Get the MONERRSTRUCT object.
+                        var mon = Marshal.PtrToStructure<Ddeml.MONERRSTRUCT>(phData);
+                        _Parent.OnError(mon);
+                        break;
+                    }
+                    case Ddeml.MF_HSZ_INFO:
+                    {
+                        // Get the MONHSZSTRUCT object.
+                        var mon = Marshal.PtrToStructure<Ddeml.MONHSZSTRUCT>(phData);
+                        _Parent.OnString(mon);
+                        break;
+                    }
+                    case Ddeml.MF_LINKS:
+                    {
+                        // Get the MONLINKSTRUCT object.
+                        var mon = Marshal.PtrToStructure<Ddeml.MONLINKSTRUCT>(phData);
+                        _Parent.OnLink(mon);
+                        break;
+                    }
+                    case Ddeml.MF_POSTMSGS:
+                    {
+                        // Get the MONMSGSTRUCT object.
+                        var mon = Marshal.PtrToStructure<Ddeml.MONMSGSTRUCT>(phData);
+                        _Parent.OnPost(mon);
+                        break;
+                    }
+                    case Ddeml.MF_SENDMSGS:
+                    {
+                        // Get the MONMSGSTRUCT object.
+                        var mon = Marshal.PtrToStructure<Ddeml.MONMSGSTRUCT>(phData);
+                        _Parent.OnSend(mon);
+                        break;
+                    }
+                }
 
                 return true;
             }

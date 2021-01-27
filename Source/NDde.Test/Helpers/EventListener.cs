@@ -5,16 +5,15 @@ namespace NDde.Test.Helpers
 {
     internal sealed class EventListener
     {
-        private ManualResetEvent _Received = new ManualResetEvent(false);
-        private List<DdeEventArgs> _Events = new List<DdeEventArgs>();
+        private readonly ManualResetEvent _Received = new(false);
 
-        public List<DdeEventArgs> Events => _Events;
+        public List<DdeEventArgs> Events { get; } = new();
 
         public WaitHandle Received => _Received;
 
         public void OnEvent(object sender, DdeEventArgs args)
         {
-            _Events.Add(args);
+            Events.Add(args);
             _Received.Set();
         }
     } // class
