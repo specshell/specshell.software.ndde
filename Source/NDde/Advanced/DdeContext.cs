@@ -776,8 +776,7 @@ namespace NDde.Advanced
 
                 private void HiddenForm_Load(object source, EventArgs e)
                 {
-                    if (Environment.OSVersion.Platform != PlatformID.Win32NT || Environment.OSVersion.Version.Major < 5) return;
-                    // Make this a message only window if the OS is WinXP or higher.
+                    // Always create a hidden window
                     const int HWND_MESSAGE = -1;
                     SetParent(Handle, new IntPtr(HWND_MESSAGE));
                 }
