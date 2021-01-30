@@ -36,6 +36,7 @@
 using System;
 using System.ComponentModel;
 using System.Threading;
+using System.Threading.Tasks;
 using NDde.Advanced;
 using NDde.Internal;
 using NDde.Internal.Client;
@@ -422,6 +423,20 @@ namespace NDde.Client
         /// <summary>
         ///     This establishes a conversation with a server that supports the specified service name and topic name pair.
         /// </summary>
+        /// <exception cref="InvalidOperationException">
+        ///     This is thrown when the client is already connected.
+        /// </exception>
+        /// <exception cref="DdeException">
+        ///     This is thrown when the client could not connect to the server.
+        /// </exception>
+        public virtual Task ConnectAsync()
+        {
+            return Task.Factory.StartNew(Connect);
+        }
+
+        /// <summary>
+        ///     This establishes a conversation with a server that supports the specified service name and topic name pair.
+        /// </summary>
         /// <returns>
         ///     Zero if the operation succeed or non-zero if the operation failed.
         /// </returns>
@@ -487,6 +502,21 @@ namespace NDde.Client
         }
 
         /// <summary>
+        ///     This terminates the current conversation.
+        /// </summary>
+        /// <event cref="Disconnected" />
+        /// <exception cref="InvalidOperationException">
+        ///     This is thrown when the client was not previously connected.
+        /// </exception>
+        /// <exception cref="DdeException">
+        ///     This is thown when the client could not disconnect from the server.
+        /// </exception>
+        public virtual Task DisconnectAsync()
+        {
+            return Task.Factory.StartNew(Disconnect);
+        }
+
+        /// <summary>
         ///     This pauses the current conversation.
         /// </summary>
         /// <exception cref="InvalidOperationException">
@@ -522,6 +552,25 @@ namespace NDde.Client
         }
 
         /// <summary>
+        ///     This pauses the current conversation.
+        /// </summary>
+        /// <exception cref="InvalidOperationException">
+        ///     This is thrown when the conversation is already paused.
+        /// </exception>
+        /// <exception cref="DdeException">
+        ///     This is thrown when the conversation could not be paused or when the client is not connected.
+        /// </exception>
+        /// <remarks>
+        ///     Synchronous operations will timeout if the conversation is paused.  Asynchronous operations can begin, but will not
+        ///     complete until the
+        ///     conversation has resumed.
+        /// </remarks>
+        public virtual Task PauseAsync()
+        {
+            return Task.Factory.StartNew(Pause);
+        }
+
+        /// <summary>
         ///     This resumes the current conversation.
         /// </summary>
         /// <exception cref="InvalidOperationException">
@@ -549,6 +598,20 @@ namespace NDde.Client
             {
                 throw new ObjectDisposedException(GetType().ToString(), e);
             }
+        }
+
+        /// <summary>
+        ///     This resumes the current conversation.
+        /// </summary>
+        /// <exception cref="InvalidOperationException">
+        ///     This is thrown when the conversation was not previously paused or when the client is not connected.
+        /// </exception>
+        /// <exception cref="DdeException">
+        ///     This is thrown when the conversation could not be resumed.
+        /// </exception>
+        public virtual Task ResumeAsync()
+        {
+            return Task.Factory.StartNew(Resume);
         }
 
         /// <summary>
@@ -678,6 +741,32 @@ namespace NDde.Client
             {
                 throw new ObjectDisposedException(GetType().ToString(), e);
             }
+        }
+
+        /// <summary>
+        ///     This begins an asynchronous operation to send a command to the server application.
+        /// </summary>
+        /// <param name="command">
+        ///     The command to be sent to the server application.
+        /// </param>
+        /// <returns>
+        ///     An <c>Task</c> object for this operation.
+        /// </returns>
+        /// <exception cref="ArgumentException">
+        ///     This is thown when command exceeds 255 characters.
+        /// </exception>
+        /// <exception cref="ArgumentNullException">
+        ///     This is thrown when command is a null reference.
+        /// </exception>
+        /// <exception cref="InvalidOperationException">
+        ///     This is thrown when the client is not connected.
+        /// </exception>
+        /// <exception cref="DdeException">
+        ///     This is thrown when the asynchronous operation could not begin.
+        /// </exception>
+        public virtual Task ExecuteAsync(string command)
+        {
+            return Task.Factory.FromAsync(BeginExecute(command, null, null), EndExecute);
         }
 
         /// <summary>
@@ -901,6 +990,67 @@ namespace NDde.Client
             {
                 throw new ObjectDisposedException(GetType().ToString(), e);
             }
+        }
+
+        /// <summary>
+        ///     This begins an asynchronous operation to send data to the server application.
+        /// </summary>
+        /// <param name="item">
+        ///     An item name supported by the current conversation.
+        /// </param>
+        /// <param name="data">
+        ///     The data to send.
+        /// </param>
+        /// <returns>
+        ///     An <c>Task</c> object for this operation.
+        /// </returns>
+        /// <exception cref="ArgumentException">
+        ///     This is thown when item exceeds 255 characters.
+        /// </exception>
+        /// <exception cref="ArgumentNullException">
+        ///     This is thrown when item or data is a null reference.
+        /// </exception>
+        /// <exception cref="InvalidOperationException">
+        ///     This is thrown when the client is not connected.
+        /// </exception>
+        /// <exception cref="DdeException">
+        ///     This is thrown when the asynchronous operation could not begin.
+        /// </exception>
+        public virtual Task PokeAsync(string item, string data)
+        {
+            return PokeAsync(item, Context.Encoding.GetBytes(data + "\0"), 1);
+        }
+
+        /// <summary>
+        ///     This begins an asynchronous operation to send data to the server application.
+        /// </summary>
+        /// <param name="item">
+        ///     An item name supported by the current conversation.
+        /// </param>
+        /// <param name="data">
+        ///     The data to send.
+        /// </param>
+        /// <param name="format">
+        ///     The format of the data.
+        /// </param>
+        /// <returns>
+        ///     An <c>IAsyncResult</c> object for this operation.
+        /// </returns>
+        /// <exception cref="ArgumentException">
+        ///     This is thown when item exceeds 255 characters.
+        /// </exception>
+        /// <exception cref="ArgumentNullException">
+        ///     This is thrown when item or data is a null reference.
+        /// </exception>
+        /// <exception cref="InvalidOperationException">
+        ///     This is thrown when the client is not connected.
+        /// </exception>
+        /// <exception cref="DdeException">
+        ///     This is thrown when the asynchronous operation could not begin.
+        /// </exception>
+        public virtual Task PokeAsync(string item, byte[] data, int format)
+        {
+            return Task.Factory.FromAsync(BeginPoke(item, data, format, null, null), EndPoke);
         }
 
         /// <summary>
@@ -1144,6 +1294,61 @@ namespace NDde.Client
         /// <param name="item">
         ///     An item name supported by the current conversation.
         /// </param>
+        /// <returns>
+        ///     An <c>Task</c> object for this operation.
+        /// </returns>
+        /// <exception cref="ArgumentException">
+        ///     This is thown when item exceeds 255 characters.
+        /// </exception>
+        /// <exception cref="ArgumentNullException">
+        ///     This is thrown when item is a null reference.
+        /// </exception>
+        /// <exception cref="InvalidOperationException">
+        ///     This is thrown when the client is not connected.
+        /// </exception>
+        /// <exception cref="DdeException">
+        ///     This is thrown when the asynchronous operation could not begin.
+        /// </exception>
+        public virtual async Task<string> RequestAsync(string item)
+        {
+            return Context.Encoding.GetString(await RequestAsync(item, 1));
+        }
+
+        /// <summary>
+        ///     This begins an asynchronous operation to request data using the specified item name.
+        /// </summary>
+        /// <param name="item">
+        ///     An item name supported by the current conversation.
+        /// </param>
+        /// <param name="format">
+        ///     The format of the data to return.
+        /// </param>
+        /// <returns>
+        ///     An <c>IAsyncResult</c> object for this operation.
+        /// </returns>
+        /// <exception cref="ArgumentException">
+        ///     This is thown when item exceeds 255 characters.
+        /// </exception>
+        /// <exception cref="ArgumentNullException">
+        ///     This is thrown when item is a null reference.
+        /// </exception>
+        /// <exception cref="InvalidOperationException">
+        ///     This is thrown when the client is not connected.
+        /// </exception>
+        /// <exception cref="DdeException">
+        ///     This is thrown when the asynchronous operation could not begin.
+        /// </exception>
+        public virtual Task<byte[]> RequestAsync(string item, int format)
+        {
+            return Task.Factory.FromAsync(BeginRequest(item, format, null, null), EndRequest);
+        }
+
+        /// <summary>
+        ///     This begins an asynchronous operation to request data using the specified item name.
+        /// </summary>
+        /// <param name="item">
+        ///     An item name supported by the current conversation.
+        /// </param>
         /// <param name="format">
         ///     The format of the data to return.
         /// </param>
@@ -1337,10 +1542,78 @@ namespace NDde.Client
             }
         }
 
-        /// <overloads>
-        ///     <summary>
-        ///     </summary>
-        /// </overloads>
+        /// <summary>
+        ///     This begins an asynchronous operation to initiate an advise loop on the specified item name.
+        /// </summary>
+        /// <param name="item">
+        ///     An item name supported by the current conversation.
+        /// </param>
+        /// <param name="format">
+        ///     The format of the data to be returned.
+        /// </param>
+        /// <param name="hot">
+        ///     A bool indicating whether data should be included with the notification.
+        /// </param>
+        /// <returns>
+        ///     An <c>Task</c> object for this operation.
+        /// </returns>
+        /// <event cref="Advise" />
+        /// <exception cref="ArgumentException">
+        ///     This is thown when item exceeds 255 characters.
+        /// </exception>
+        /// <exception cref="ArgumentNullException">
+        ///     This is thrown when item is a null reference.
+        /// </exception>
+        /// <exception cref="InvalidOperationException">
+        ///     This is thrown when the item is already being advised or when the client is not connected.
+        /// </exception>
+        /// <exception cref="DdeException">
+        ///     This is thrown when the asynchronous operation could not begin.
+        /// </exception>
+        public virtual Task StartAdviseAsync(string item, int format, bool hot)
+        {
+            return StartAdviseAsync(item, format, hot, true, null);
+        }
+
+        /// <summary>
+        ///     This begins an asynchronous operation to initiate an advise loop on the specified item name.
+        /// </summary>
+        /// <param name="item">
+        ///     An item name supported by the current conversation.
+        /// </param>
+        /// <param name="format">
+        ///     The format of the data to be returned.
+        /// </param>
+        /// <param name="hot">
+        ///     A bool indicating whether data should be included with the notification.
+        /// </param>
+        /// <param name="acknowledge">
+        ///     A bool indicating whether the client should acknowledge each advisory before the server will send send another.
+        /// </param>
+        /// <param name="adviseState">
+        ///     An application defined data object to associate with this advise loop.
+        /// </param>
+        /// <returns>
+        ///     An <c>Task</c> object for this operation.
+        /// </returns>
+        /// <event cref="Advise" />
+        /// <exception cref="ArgumentException">
+        ///     This is thown when item exceeds 255 characters.
+        /// </exception>
+        /// <exception cref="ArgumentNullException">
+        ///     This is thrown when item is a null reference.
+        /// </exception>
+        /// <exception cref="InvalidOperationException">
+        ///     This is thrown when the item is already being advised or when the client is not connected.
+        /// </exception>
+        /// <exception cref="DdeException">
+        ///     This is thrown when the asynchronous operation could not begin.
+        /// </exception>
+        public virtual Task StartAdviseAsync(string item, int format, bool hot, bool acknowledge, object adviseState)
+        {
+            return Task.Factory.FromAsync(BeginStartAdvise(item, format, hot, acknowledge, null, null, adviseState), EndStartAdvise);
+        }
+
         /// <summary>
         ///     This begins an asynchronous operation to initiate an advise loop on the specified item name.
         /// </summary>
@@ -1529,6 +1802,32 @@ namespace NDde.Client
             {
                 throw new ObjectDisposedException(GetType().ToString(), e);
             }
+        }
+
+        /// <summary>
+        ///     This begins an asynchronous operation to terminate the advise loop for the specified item name.
+        /// </summary>
+        /// <param name="item">
+        ///     An item name that has an active advise loop.
+        /// </param>
+        /// <returns>
+        ///     An <c>Task</c> object for this operation.
+        /// </returns>
+        /// <exception cref="ArgumentException">
+        ///     This is thown when item exceeds 255 characters.
+        /// </exception>
+        /// <exception cref="ArgumentNullException">
+        ///     This is thrown when item is a null reference.
+        /// </exception>
+        /// <exception cref="InvalidOperationException">
+        ///     This is thrown when the item is not being advised or when the client is not connected.
+        /// </exception>
+        /// <exception cref="DdeException">
+        ///     This is thrown when the asynchronous operation could not begin.
+        /// </exception>
+        public virtual Task StopAdviseAsync(string item)
+        {
+            return Task.Factory.FromAsync(BeginStopAdvise(item, null, null), EndStopAdvise);
         }
 
         /// <summary>
