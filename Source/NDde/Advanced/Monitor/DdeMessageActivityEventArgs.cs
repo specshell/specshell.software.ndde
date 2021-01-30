@@ -51,7 +51,7 @@ namespace NDde.Advanced.Monitor
         /// <summary>
         ///     The message was sent by a DDE application.
         /// </summary>
-        Send
+        Send,
     } // enum
 
     /// <summary>

@@ -45,9 +45,9 @@ namespace NDde.Server
     public sealed class DdeConversation
     {
         private readonly DdemlConversation _DdemlObject;
+        private readonly object _LockObject = new();
         private IntPtr _Handle = IntPtr.Zero;
         private bool _IsPaused;
-        private readonly object _LockObject = new object();
 
         // These are used to cache the property values of the DdemlConversation.
         private string _Service = "";

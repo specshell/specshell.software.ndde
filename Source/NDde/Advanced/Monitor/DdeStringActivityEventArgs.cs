@@ -37,40 +37,38 @@ using NDde.Internal.Advanced.Monitor;
 
 namespace NDde.Advanced.Monitor
 {
-    using System;
-
     /// <summary>
-    /// This represents the type of string activity.
+    ///     This represents the type of string activity.
     /// </summary>
     public enum DdeStringActivityType
     {
         /// <summary>
-        /// The DDE application called DdeUninitialize.
+        ///     The DDE application called DdeUninitialize.
         /// </summary>
         CleanUp = DdemlStringActivityType.CleanUp,
 
         /// <summary>
-        /// The DDE application is creating a string handle.
+        ///     The DDE application is creating a string handle.
         /// </summary>
         Create = DdemlStringActivityType.Create,
 
         /// <summary>
-        /// The DDE application is deleting a string handle.
+        ///     The DDE application is deleting a string handle.
         /// </summary>
         Delete = DdemlStringActivityType.Delete,
 
         /// <summary>
-        /// The DDE application is incrementing the reference count of an existing string handle.
+        ///     The DDE application is incrementing the reference count of an existing string handle.
         /// </summary>
-        Keep = DdemlStringActivityType.Keep
+        Keep = DdemlStringActivityType.Keep,
     } // enum
 
     /// <summary>
-    /// This contains information about the <c>StringActivity</c> event.
+    ///     This contains information about the <c>StringActivity</c> event.
     /// </summary>
     public sealed class DdeStringActivityEventArgs : DdeActivityEventArgs
     {
-        private DdemlStringActivityEventArgs _DdemlObject = null;
+        private readonly DdemlStringActivityEventArgs _DdemlObject;
 
         internal DdeStringActivityEventArgs(DdemlStringActivityEventArgs args) : base(args)
         {
@@ -78,12 +76,12 @@ namespace NDde.Advanced.Monitor
         }
 
         /// <summary>
-        /// This gets the text associated with the string handle.
+        ///     This gets the text associated with the string handle.
         /// </summary>
         public string Value => _DdemlObject.Value;
 
         /// <summary>
-        /// This gets the action being performed.
+        ///     This gets the action being performed.
         /// </summary>
         public DdeStringActivityType Action => (DdeStringActivityType) (int) _DdemlObject.Action;
     } // class

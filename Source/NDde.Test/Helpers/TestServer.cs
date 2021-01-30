@@ -1,4 +1,5 @@
 using System.Collections;
+using System.Linq;
 using System.Timers;
 using NDde.Advanced;
 using NDde.Server;
@@ -7,15 +8,14 @@ namespace NDde.Test.Helpers
 {
     internal class TestServer : TracingServer
     {
-        private Timer _Timer = new Timer();
-        private string _Command = "";
-        private IDictionary _Data = new Hashtable();
-        private IDictionary _Conversation = new Hashtable();
+        private readonly IDictionary _Conversation = new Hashtable();
+        private readonly IDictionary _Data = new Hashtable();
+        private readonly Timer _Timer = new();
 
         public TestServer(string service)
             : base(service)
         {
-            _Timer.Elapsed += new ElapsedEventHandler(OnTimerElapsed);
+            _Timer.Elapsed += OnTimerElapsed;
             _Timer.Interval = 1000;
             _Timer.SynchronizingObject = Context;
         }
@@ -23,24 +23,24 @@ namespace NDde.Test.Helpers
         public TestServer(string service, DdeContext context)
             : base(service, context)
         {
-            _Timer.Elapsed += new ElapsedEventHandler(OnTimerElapsed);
+            _Timer.Elapsed += OnTimerElapsed;
             _Timer.Interval = 1000;
             _Timer.SynchronizingObject = Context;
         }
 
         public double Interval => _Timer.Interval;
 
-        public string Command => _Command;
+        public string Command { get; private set; } = "";
 
         public byte[] GetData(string topic, string item, int format)
         {
-            var key = topic + ":" + item + ":" + format.ToString();
+            var key = topic + ":" + item + ":" + format;
             return (byte[]) _Data[key];
         }
 
         public void SetData(string topic, string item, int format, byte[] data)
         {
-            var key = topic + ":" + item + ":" + format.ToString();
+            var key = topic + ":" + item + ":" + format;
             _Data[key] = data;
         }
 
@@ -56,9 +56,10 @@ namespace NDde.Test.Helpers
                 if (c.IsPaused)
                     Resume(c);
 
-            foreach (DdeConversation c in _Conversation.Values)
-                if (c.IsPaused)
-                    return;
+            if (_Conversation.Values.Cast<DdeConversation>().Any(c => c.IsPaused))
+            {
+                return;
+            }
 
             _Timer.Stop();
         }
@@ -87,15 +88,10 @@ namespace NDde.Test.Helpers
             return true;
         }
 
-        protected override void OnStopAdvise(DdeConversation conversation, string item)
-        {
-            base.OnStopAdvise(conversation, item);
-        }
-
         protected override ExecuteResult OnExecute(DdeConversation conversation, string command)
         {
             base.OnExecute(conversation, command);
-            _Command = command;
+            Command = command;
             switch (command)
             {
                 case "#NotProcessed":
@@ -130,7 +126,7 @@ namespace NDde.Test.Helpers
         protected override PokeResult OnPoke(DdeConversation conversation, string item, byte[] data, int format)
         {
             base.OnPoke(conversation, item, data, format);
-            var key = conversation.Topic + ":" + item + ":" + format.ToString();
+            var key = conversation.Topic + ":" + item + ":" + format;
             _Data[key] = data;
             switch (item)
             {
@@ -166,15 +162,14 @@ namespace NDde.Test.Helpers
         protected override RequestResult OnRequest(DdeConversation conversation, string item, int format)
         {
             base.OnRequest(conversation, item, format);
-            var key = conversation.Topic + ":" + item + ":" + format.ToString();
-            if (_Data.Contains(key)) return new RequestResult((byte[]) _Data[key]);
-            return RequestResult.NotProcessed;
+            var key = conversation.Topic + ":" + item + ":" + format;
+            return _Data.Contains(key) ? new RequestResult((byte[]) _Data[key]) : RequestResult.NotProcessed;
         }
 
         protected override byte[] OnAdvise(string topic, string item, int format)
         {
             base.OnAdvise(topic, item, format);
-            var key = topic + ":" + item + ":" + format.ToString();
+            var key = topic + ":" + item + ":" + format;
             if (_Data.Contains(key)) return (byte[]) _Data[key];
             return null;
         }

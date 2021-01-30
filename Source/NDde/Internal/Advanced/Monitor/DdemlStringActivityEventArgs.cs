@@ -45,7 +45,7 @@ namespace NDde.Internal.Advanced.Monitor
 
         Delete = Ddeml.MH_DELETE,
 
-        Keep = Ddeml.MH_KEEP
+        Keep = Ddeml.MH_KEEP,
     } // enum
 
     internal sealed class DdemlStringActivityEventArgs : DdemlActivityEventArgs

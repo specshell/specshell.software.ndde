@@ -74,7 +74,7 @@ namespace NDde.Advanced.Monitor
         /// <summary>
         ///     This indicates activity caused by DDE messages.
         /// </summary>
-        Message = DdemlMonitorFlags.Message
+        Message = DdemlMonitorFlags.Message,
     } // enum
 
     /// <summary>
@@ -82,10 +82,10 @@ namespace NDde.Advanced.Monitor
     /// </summary>
     public sealed class DdeMonitor : IDisposable
     {
+        private readonly object _LockObject = new();
         private DdeContext _Context;
 
         private DdemlMonitor _DdemlObject; // This has lazy initialization through a property.
-        private readonly object _LockObject = new object();
 
         ///// <summary>
         /////
@@ -143,16 +143,14 @@ namespace NDde.Advanced.Monitor
             {
                 lock (_LockObject)
                 {
-                    if (_DdemlObject == null)
-                    {
-                        _DdemlObject = new DdemlMonitor(Context.DdemlObject);
-                        _DdemlObject.CallbackActivity += OnCallbackActivity;
-                        _DdemlObject.ConversationActivity += OnConversationActivity;
-                        _DdemlObject.ErrorActivity += OnErrorActivity;
-                        _DdemlObject.LinkActivity += OnLinkActivity;
-                        _DdemlObject.MessageActivity += OnMessageActivity;
-                        //_DdemlObject.StringActivity += new EventHandler<DdemlStringActivityEventArgs>(this.OnStringActivity);
-                    }
+                    if (_DdemlObject != null) return _DdemlObject;
+                    _DdemlObject = new DdemlMonitor(Context.DdemlObject);
+                    _DdemlObject.CallbackActivity += OnCallbackActivity;
+                    _DdemlObject.ConversationActivity += OnConversationActivity;
+                    _DdemlObject.ErrorActivity += OnErrorActivity;
+                    _DdemlObject.LinkActivity += OnLinkActivity;
+                    _DdemlObject.MessageActivity += OnMessageActivity;
+                    //_DdemlObject.StringActivity += new EventHandler<DdemlStringActivityEventArgs>(this.OnStringActivity);
 
                     return _DdemlObject;
                 }
@@ -282,18 +280,20 @@ namespace NDde.Advanced.Monitor
 
         private void Dispose(bool disposing)
         {
-            if (disposing)
-            {
-                ThreadStart method = delegate { DdemlObject.Dispose(); };
+            if (!disposing) return;
 
-                try
-                {
-                    Context.Invoke(method);
-                }
-                catch
-                {
-                    // Swallow any exception that occurs.
-                }
+            void InnerDispose()
+            {
+                DdemlObject.Dispose();
+            }
+
+            try
+            {
+                Context.Invoke(InnerDispose);
+            }
+            catch
+            {
+                // Swallow any exception that occurs.
             }
         }
 
@@ -305,11 +305,14 @@ namespace NDde.Advanced.Monitor
         /// </param>
         public void Start(DdeMonitorFlags flags)
         {
-            ThreadStart method = delegate { DdemlObject.Start((DdemlMonitorFlags) (int) flags); };
+            void InnerStart()
+            {
+                DdemlObject.Start((DdemlMonitorFlags) (int) flags);
+            }
 
             try
             {
-                Context.Invoke(method);
+                Context.Invoke(InnerStart);
             }
             catch (DdemlException e)
             {
@@ -349,8 +352,7 @@ namespace NDde.Advanced.Monitor
                 copy = _MessageActivityEvent;
             }
 
-            if (copy != null)
-                copy(this, new DdeMessageActivityEventArgs(e));
+            copy?.Invoke(this, new DdeMessageActivityEventArgs(e));
         }
 
         private void OnLinkActivity(object sender, DdemlLinkActivityEventArgs e)
@@ -364,8 +366,7 @@ namespace NDde.Advanced.Monitor
                 copy = _LinkActivityEvent;
             }
 
-            if (copy != null)
-                copy(this, new DdeLinkActivityEventArgs(e));
+            copy?.Invoke(this, new DdeLinkActivityEventArgs(e));
         }
 
         private void OnErrorActivity(object sender, DdemlErrorActivityEventArgs e)
@@ -379,8 +380,7 @@ namespace NDde.Advanced.Monitor
                 copy = _ErrorActivityEvent;
             }
 
-            if (copy != null)
-                copy(this, new DdeErrorActivityEventArgs(e));
+            copy?.Invoke(this, new DdeErrorActivityEventArgs(e));
         }
 
         private void OnConversationActivity(object sender, DdemlConversationActivityEventArgs e)
@@ -394,8 +394,7 @@ namespace NDde.Advanced.Monitor
                 copy = _ConversationActivityEvent;
             }
 
-            if (copy != null)
-                copy(this, new DdeConversationActivityEventArgs(e));
+            copy?.Invoke(this, new DdeConversationActivityEventArgs(e));
         }
 
         private void OnCallbackActivity(object sender, DdemlCallbackActivityEventArgs e)
@@ -409,8 +408,7 @@ namespace NDde.Advanced.Monitor
                 copy = _CallbackActivityEvent;
             }
 
-            if (copy != null)
-                copy(this, new DdeCallbackActivityEventArgs(e));
+            copy?.Invoke(this, new DdeCallbackActivityEventArgs(e));
         }
     } // class
 } // namespace

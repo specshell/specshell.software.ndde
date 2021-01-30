@@ -35,8 +35,8 @@
 
 using System;
 using System.ComponentModel;
-using System.Diagnostics;
 using System.Threading;
+using System.Threading.Tasks;
 using NDde.Advanced;
 using NDde.Internal;
 using NDde.Internal.Client;
@@ -76,9 +76,9 @@ namespace NDde.Client
     ///         if the thread does not become available in a timely manner.
     ///     </para>
     /// </remarks>
-    /// <include file='Documentation/Examples.xml' path='Comment/Member[@name="DdeClient"]/*' />
     public class DdeClient : IDisposable
     {
+        private readonly object _LockObject = new();
         //internal static EventLog EventLogWriter =
         //CreateEventsLogger.CreaterEventLogger("NDDE Events", "NdDeEventsLog");
 
@@ -91,8 +91,6 @@ namespace NDde.Client
         private IntPtr _Handle = IntPtr.Zero; // This is a cached DdemlClient property.
         private bool _IsConnected; // This is a cached DdemlClient property.
         private bool _IsPaused; // This is a cached DdemlClient property.
-
-        private readonly object _LockObject = new object();
         private string _Service = ""; // This is a cached DdemlClient property.
         private string _Topic = ""; // This is a cached DdemlClient property.
 
@@ -182,13 +180,11 @@ namespace NDde.Client
             {
                 lock (_LockObject)
                 {
-                    if (_DdemlObject == null)
-                    {
-                        _DdemlObject = new DdemlClient(Service, Topic, Context.DdemlObject);
-                        _DdemlObject.Advise += OnAdviseReceived;
-                        _DdemlObject.Disconnected += OnDisconnected;
-                        _DdemlObject.StateChange += OnStateChange;
-                    }
+                    if (_DdemlObject != null) return _DdemlObject;
+                    _DdemlObject = new DdemlClient(Service, Topic, Context.DdemlObject);
+                    _DdemlObject.Advise += OnAdviseReceived;
+                    _DdemlObject.Disconnected += OnDisconnected;
+                    _DdemlObject.StateChange += OnStateChange;
 
                     return _DdemlObject;
                 }
@@ -374,18 +370,20 @@ namespace NDde.Client
         /// </param>
         protected virtual void Dispose(bool disposing)
         {
-            if (disposing)
-            {
-                ThreadStart method = delegate { DdemlObject.Dispose(); };
+            if (!disposing) return;
 
-                try
-                {
-                    Context.Invoke(method);
-                }
-                catch
-                {
-                    // Swallow any exception that occurs.
-                }
+            void InnerDispose()
+            {
+                DdemlObject.Dispose();
+            }
+
+            try
+            {
+                Context.Invoke(InnerDispose);
+            }
+            catch
+            {
+                // Swallow any exception that occurs.
             }
         }
 
@@ -400,12 +398,15 @@ namespace NDde.Client
         /// </exception>
         public virtual void Connect()
         {
-            ThreadStart method = delegate { DdemlObject.Connect(); };
+            void InnerConnect()
+            {
+                DdemlObject.Connect();
+            }
 
             try
             {
                 //Thread.Sleep(1000);
-                Context.Invoke(method);
+                Context.Invoke(InnerConnect);
             }
             catch (DdemlException e)
             {
@@ -422,6 +423,20 @@ namespace NDde.Client
         /// <summary>
         ///     This establishes a conversation with a server that supports the specified service name and topic name pair.
         /// </summary>
+        /// <exception cref="InvalidOperationException">
+        ///     This is thrown when the client is already connected.
+        /// </exception>
+        /// <exception cref="DdeException">
+        ///     This is thrown when the client could not connect to the server.
+        /// </exception>
+        public virtual Task ConnectAsync()
+        {
+            return Task.Factory.StartNew(Connect);
+        }
+
+        /// <summary>
+        ///     This establishes a conversation with a server that supports the specified service name and topic name pair.
+        /// </summary>
         /// <returns>
         ///     Zero if the operation succeed or non-zero if the operation failed.
         /// </returns>
@@ -429,11 +444,14 @@ namespace NDde.Client
         {
             var result = 0;
 
-            ThreadStart method = delegate { result = DdemlObject.TryConnect(); };
+            void InnerTryConnect()
+            {
+                result = DdemlObject.TryConnect();
+            }
 
             try
             {
-                Context.Invoke(method);
+                Context.Invoke(InnerTryConnect);
                 return result;
             }
             catch (DdemlException e)
@@ -461,17 +479,70 @@ namespace NDde.Client
         /// </exception>
         public virtual void Disconnect()
         {
-            ThreadStart method = delegate { DdemlObject.Disconnect(); };
+            void InnerDisconnect()
+            {
+                DdemlObject.Disconnect();
+            }
 
             try
             {
-                Context.Invoke(method);
+                Context.Invoke(InnerDisconnect);
             }
             catch (DdemlException e)
             {
                 //EventLogWriter.WriteEntry($"Disconnect:{e.Message} - {e.StackTrace}",
                 //EventLogEntryType.Error);
 
+                throw new DdeException(e);
+            }
+            catch (ObjectDisposedException e)
+            {
+                throw new ObjectDisposedException(GetType().ToString(), e);
+            }
+        }
+
+        /// <summary>
+        ///     This terminates the current conversation.
+        /// </summary>
+        /// <event cref="Disconnected" />
+        /// <exception cref="InvalidOperationException">
+        ///     This is thrown when the client was not previously connected.
+        /// </exception>
+        /// <exception cref="DdeException">
+        ///     This is thown when the client could not disconnect from the server.
+        /// </exception>
+        public virtual Task DisconnectAsync()
+        {
+            return Task.Factory.StartNew(Disconnect);
+        }
+
+        /// <summary>
+        ///     This pauses the current conversation.
+        /// </summary>
+        /// <exception cref="InvalidOperationException">
+        ///     This is thrown when the conversation is already paused.
+        /// </exception>
+        /// <exception cref="DdeException">
+        ///     This is thrown when the conversation could not be paused or when the client is not connected.
+        /// </exception>
+        /// <remarks>
+        ///     Synchronous operations will timeout if the conversation is paused.  Asynchronous operations can begin, but will not
+        ///     complete until the
+        ///     conversation has resumed.
+        /// </remarks>
+        public virtual void Pause()
+        {
+            void InnerPause()
+            {
+                DdemlObject.Pause();
+            }
+
+            try
+            {
+                Context.Invoke(InnerPause);
+            }
+            catch (DdemlException e)
+            {
                 throw new DdeException(e);
             }
             catch (ObjectDisposedException e)
@@ -494,13 +565,30 @@ namespace NDde.Client
         ///     complete until the
         ///     conversation has resumed.
         /// </remarks>
-        public virtual void Pause()
+        public virtual Task PauseAsync()
         {
-            ThreadStart method = delegate { DdemlObject.Pause(); };
+            return Task.Factory.StartNew(Pause);
+        }
+
+        /// <summary>
+        ///     This resumes the current conversation.
+        /// </summary>
+        /// <exception cref="InvalidOperationException">
+        ///     This is thrown when the conversation was not previously paused or when the client is not connected.
+        /// </exception>
+        /// <exception cref="DdeException">
+        ///     This is thrown when the conversation could not be resumed.
+        /// </exception>
+        public virtual void Resume()
+        {
+            void InnerResume()
+            {
+                DdemlObject.Resume();
+            }
 
             try
             {
-                Context.Invoke(method);
+                Context.Invoke(InnerResume);
             }
             catch (DdemlException e)
             {
@@ -521,22 +609,9 @@ namespace NDde.Client
         /// <exception cref="DdeException">
         ///     This is thrown when the conversation could not be resumed.
         /// </exception>
-        public virtual void Resume()
+        public virtual Task ResumeAsync()
         {
-            ThreadStart method = delegate { DdemlObject.Resume(); };
-
-            try
-            {
-                Context.Invoke(method);
-            }
-            catch (DdemlException e)
-            {
-                throw new DdeException(e);
-            }
-            catch (ObjectDisposedException e)
-            {
-                throw new ObjectDisposedException(GetType().ToString(), e);
-            }
+            return Task.Factory.StartNew(Resume);
         }
 
         /// <summary>
@@ -562,17 +637,17 @@ namespace NDde.Client
         /// </exception>
         public virtual void Abandon(IAsyncResult asyncResult)
         {
-            ThreadStart method = delegate
+            void InnerAbandon()
             {
-                if (asyncResult is AsyncResult)
-                    DdemlObject.Abandon(((AsyncResult) asyncResult).DdemlAsyncResult);
+                if (asyncResult is AsyncResult result)
+                    DdemlObject.Abandon(result.DdemlAsyncResult);
                 else
                     DdemlObject.Abandon(InvalidAsyncResult.Instance);
-            };
+            }
 
             try
             {
-                Context.Invoke(method);
+                Context.Invoke(InnerAbandon);
             }
             catch (DdemlException e)
             {
@@ -610,11 +685,14 @@ namespace NDde.Client
         /// </remarks>
         public virtual void Execute(string command, int timeout = 500)
         {
-            ThreadStart method = delegate { DdemlObject.Execute(command, timeout); };
+            void InnerExecute()
+            {
+                DdemlObject.Execute(command, timeout);
+            }
 
             try
             {
-                Context.Invoke(method);
+                Context.Invoke(InnerExecute);
             }
             catch (DdemlException e)
             {
@@ -645,11 +723,14 @@ namespace NDde.Client
         {
             var result = 0;
 
-            ThreadStart method = delegate { result = DdemlObject.TryExecute(command, timeout); };
+            void InnerTryExecute()
+            {
+                result = DdemlObject.TryExecute(command, timeout);
+            }
 
             try
             {
-                Context.Invoke(method);
+                Context.Invoke(InnerTryExecute);
                 return result;
             }
             catch (DdemlException e)
@@ -660,6 +741,32 @@ namespace NDde.Client
             {
                 throw new ObjectDisposedException(GetType().ToString(), e);
             }
+        }
+
+        /// <summary>
+        ///     This begins an asynchronous operation to send a command to the server application.
+        /// </summary>
+        /// <param name="command">
+        ///     The command to be sent to the server application.
+        /// </param>
+        /// <returns>
+        ///     An <c>Task</c> object for this operation.
+        /// </returns>
+        /// <exception cref="ArgumentException">
+        ///     This is thown when command exceeds 255 characters.
+        /// </exception>
+        /// <exception cref="ArgumentNullException">
+        ///     This is thrown when command is a null reference.
+        /// </exception>
+        /// <exception cref="InvalidOperationException">
+        ///     This is thrown when the client is not connected.
+        /// </exception>
+        /// <exception cref="DdeException">
+        ///     This is thrown when the asynchronous operation could not begin.
+        /// </exception>
+        public virtual Task ExecuteAsync(string command)
+        {
+            return Task.Factory.FromAsync(BeginExecute(command, null, null), EndExecute);
         }
 
         /// <summary>
@@ -691,15 +798,16 @@ namespace NDde.Client
         /// </exception>
         public virtual IAsyncResult BeginExecute(string command, AsyncCallback callback, object state)
         {
-            var ar = new AsyncResult(Context);
-            ar.Callback = callback;
-            ar.State = state;
+            var ar = new AsyncResult(Context) {Callback = callback, State = state};
 
-            ThreadStart method = delegate { ar.DdemlAsyncResult = DdemlObject.BeginExecute(command, OnExecuteComplete, ar); };
+            void InnerBeginExecute()
+            {
+                ar.DdemlAsyncResult = DdemlObject.BeginExecute(command, OnExecuteComplete, ar);
+            }
 
             try
             {
-                Context.Invoke(method);
+                Context.Invoke(InnerBeginExecute);
             }
             catch (DdemlException e)
             {
@@ -730,17 +838,17 @@ namespace NDde.Client
         /// </exception>
         public virtual void EndExecute(IAsyncResult asyncResult)
         {
-            ThreadStart method = delegate
+            void InnerEndExecute()
             {
-                if (asyncResult is AsyncResult)
-                    DdemlObject.EndExecute(((AsyncResult) asyncResult).DdemlAsyncResult);
+                if (asyncResult is AsyncResult result)
+                    DdemlObject.EndExecute(result.DdemlAsyncResult);
                 else
                     DdemlObject.EndExecute(InvalidAsyncResult.Instance);
-            };
+            }
 
             try
             {
-                Context.Invoke(method);
+                Context.Invoke(InnerEndExecute);
             }
             catch (DdemlException e)
             {
@@ -820,11 +928,14 @@ namespace NDde.Client
         /// </remarks>
         public virtual void Poke(string item, byte[] data, int format, int timeout)
         {
-            ThreadStart method = delegate { DdemlObject.Poke(item, data, format, timeout); };
+            void InnerPoke()
+            {
+                DdemlObject.Poke(item, data, format, timeout);
+            }
 
             try
             {
-                Context.Invoke(method);
+                Context.Invoke(InnerPoke);
             }
             catch (DdemlException e)
             {
@@ -861,11 +972,14 @@ namespace NDde.Client
         {
             var result = 0;
 
-            ThreadStart method = delegate { result = DdemlObject.TryPoke(item, data, format, timeout); };
+            void InnerTryPoke()
+            {
+                result = DdemlObject.TryPoke(item, data, format, timeout);
+            }
 
             try
             {
-                Context.Invoke(method);
+                Context.Invoke(InnerTryPoke);
                 return result;
             }
             catch (DdemlException e)
@@ -876,6 +990,67 @@ namespace NDde.Client
             {
                 throw new ObjectDisposedException(GetType().ToString(), e);
             }
+        }
+
+        /// <summary>
+        ///     This begins an asynchronous operation to send data to the server application.
+        /// </summary>
+        /// <param name="item">
+        ///     An item name supported by the current conversation.
+        /// </param>
+        /// <param name="data">
+        ///     The data to send.
+        /// </param>
+        /// <returns>
+        ///     An <c>Task</c> object for this operation.
+        /// </returns>
+        /// <exception cref="ArgumentException">
+        ///     This is thown when item exceeds 255 characters.
+        /// </exception>
+        /// <exception cref="ArgumentNullException">
+        ///     This is thrown when item or data is a null reference.
+        /// </exception>
+        /// <exception cref="InvalidOperationException">
+        ///     This is thrown when the client is not connected.
+        /// </exception>
+        /// <exception cref="DdeException">
+        ///     This is thrown when the asynchronous operation could not begin.
+        /// </exception>
+        public virtual Task PokeAsync(string item, string data)
+        {
+            return PokeAsync(item, Context.Encoding.GetBytes(data + "\0"), 1);
+        }
+
+        /// <summary>
+        ///     This begins an asynchronous operation to send data to the server application.
+        /// </summary>
+        /// <param name="item">
+        ///     An item name supported by the current conversation.
+        /// </param>
+        /// <param name="data">
+        ///     The data to send.
+        /// </param>
+        /// <param name="format">
+        ///     The format of the data.
+        /// </param>
+        /// <returns>
+        ///     An <c>IAsyncResult</c> object for this operation.
+        /// </returns>
+        /// <exception cref="ArgumentException">
+        ///     This is thown when item exceeds 255 characters.
+        /// </exception>
+        /// <exception cref="ArgumentNullException">
+        ///     This is thrown when item or data is a null reference.
+        /// </exception>
+        /// <exception cref="InvalidOperationException">
+        ///     This is thrown when the client is not connected.
+        /// </exception>
+        /// <exception cref="DdeException">
+        ///     This is thrown when the asynchronous operation could not begin.
+        /// </exception>
+        public virtual Task PokeAsync(string item, byte[] data, int format)
+        {
+            return Task.Factory.FromAsync(BeginPoke(item, data, format, null, null), EndPoke);
         }
 
         /// <summary>
@@ -914,15 +1089,16 @@ namespace NDde.Client
         public virtual IAsyncResult BeginPoke(string item, byte[] data, int format, AsyncCallback callback,
             object state)
         {
-            var ar = new AsyncResult(Context);
-            ar.Callback = callback;
-            ar.State = state;
+            var ar = new AsyncResult(Context) {Callback = callback, State = state};
 
-            ThreadStart method = delegate { ar.DdemlAsyncResult = DdemlObject.BeginPoke(item, data, format, OnPokeComplete, ar); };
+            void InnerBeginPoke()
+            {
+                ar.DdemlAsyncResult = DdemlObject.BeginPoke(item, data, format, OnPokeComplete, ar);
+            }
 
             try
             {
-                Context.Invoke(method);
+                Context.Invoke(InnerBeginPoke);
             }
             catch (DdemlException e)
             {
@@ -953,17 +1129,17 @@ namespace NDde.Client
         /// </exception>
         public virtual void EndPoke(IAsyncResult asyncResult)
         {
-            ThreadStart method = delegate
+            void InnerEndPoke()
             {
-                if (asyncResult is AsyncResult)
-                    DdemlObject.EndPoke(((AsyncResult) asyncResult).DdemlAsyncResult);
+                if (asyncResult is AsyncResult result)
+                    DdemlObject.EndPoke(result.DdemlAsyncResult);
                 else
                     DdemlObject.EndPoke(InvalidAsyncResult.Instance);
-            };
+            }
 
             try
             {
-                Context.Invoke(method);
+                Context.Invoke(InnerEndPoke);
             }
             catch (DdemlException e)
             {
@@ -1045,11 +1221,14 @@ namespace NDde.Client
         {
             byte[] result = null;
 
-            ThreadStart method = delegate { result = DdemlObject.Request(item, format, timeout); };
+            void InnerRequest()
+            {
+                result = DdemlObject.Request(item, format, timeout);
+            }
 
             try
             {
-                Context.Invoke(method);
+                Context.Invoke(InnerRequest);
                 return result;
             }
             catch (DdemlException e)
@@ -1088,11 +1267,14 @@ namespace NDde.Client
             byte[] data2 = null;
             var result = 0;
 
-            ThreadStart method = delegate { result = DdemlObject.TryRequest(item, format, timeout, out data2); };
+            void InnerTryRequest()
+            {
+                result = DdemlObject.TryRequest(item, format, timeout, out data2);
+            }
 
             try
             {
-                Context.Invoke(method);
+                Context.Invoke(InnerTryRequest);
                 data = data2;
                 return result;
             }
@@ -1104,6 +1286,61 @@ namespace NDde.Client
             {
                 throw new ObjectDisposedException(GetType().ToString(), e);
             }
+        }
+
+        /// <summary>
+        ///     This begins an asynchronous operation to request data using the specified item name.
+        /// </summary>
+        /// <param name="item">
+        ///     An item name supported by the current conversation.
+        /// </param>
+        /// <returns>
+        ///     An <c>Task</c> object for this operation.
+        /// </returns>
+        /// <exception cref="ArgumentException">
+        ///     This is thown when item exceeds 255 characters.
+        /// </exception>
+        /// <exception cref="ArgumentNullException">
+        ///     This is thrown when item is a null reference.
+        /// </exception>
+        /// <exception cref="InvalidOperationException">
+        ///     This is thrown when the client is not connected.
+        /// </exception>
+        /// <exception cref="DdeException">
+        ///     This is thrown when the asynchronous operation could not begin.
+        /// </exception>
+        public virtual async Task<string> RequestAsync(string item)
+        {
+            return Context.Encoding.GetString(await RequestAsync(item, 1));
+        }
+
+        /// <summary>
+        ///     This begins an asynchronous operation to request data using the specified item name.
+        /// </summary>
+        /// <param name="item">
+        ///     An item name supported by the current conversation.
+        /// </param>
+        /// <param name="format">
+        ///     The format of the data to return.
+        /// </param>
+        /// <returns>
+        ///     An <c>IAsyncResult</c> object for this operation.
+        /// </returns>
+        /// <exception cref="ArgumentException">
+        ///     This is thown when item exceeds 255 characters.
+        /// </exception>
+        /// <exception cref="ArgumentNullException">
+        ///     This is thrown when item is a null reference.
+        /// </exception>
+        /// <exception cref="InvalidOperationException">
+        ///     This is thrown when the client is not connected.
+        /// </exception>
+        /// <exception cref="DdeException">
+        ///     This is thrown when the asynchronous operation could not begin.
+        /// </exception>
+        public virtual Task<byte[]> RequestAsync(string item, int format)
+        {
+            return Task.Factory.FromAsync(BeginRequest(item, format, null, null), EndRequest);
         }
 
         /// <summary>
@@ -1138,15 +1375,16 @@ namespace NDde.Client
         /// </exception>
         public virtual IAsyncResult BeginRequest(string item, int format, AsyncCallback callback, object state)
         {
-            var ar = new AsyncResult(Context);
-            ar.Callback = callback;
-            ar.State = state;
+            var ar = new AsyncResult(Context) {Callback = callback, State = state};
 
-            ThreadStart method = delegate { ar.DdemlAsyncResult = DdemlObject.BeginRequest(item, format, OnRequestComplete, ar); };
+            void InnerBeginRequest()
+            {
+                ar.DdemlAsyncResult = DdemlObject.BeginRequest(item, format, OnRequestComplete, ar);
+            }
 
             try
             {
-                Context.Invoke(method);
+                Context.Invoke(InnerBeginRequest);
             }
             catch (DdemlException e)
             {
@@ -1182,17 +1420,17 @@ namespace NDde.Client
         {
             byte[] result = null;
 
-            ThreadStart method = delegate
+            void InnerEndRequest()
             {
-                if (asyncResult is AsyncResult)
-                    result = DdemlObject.EndRequest(((AsyncResult) asyncResult).DdemlAsyncResult);
+                if (asyncResult is AsyncResult resultAsync)
+                    result = DdemlObject.EndRequest(resultAsync.DdemlAsyncResult);
                 else
                     result = DdemlObject.EndRequest(InvalidAsyncResult.Instance);
-            };
+            }
 
             try
             {
-                Context.Invoke(method);
+                Context.Invoke(InnerEndRequest);
                 return result;
             }
             catch (DdemlException e)
@@ -1285,11 +1523,14 @@ namespace NDde.Client
         public virtual void StartAdvise(string item, int format, bool hot, bool acknowledge, int timeout,
             object adviseState)
         {
-            ThreadStart method = delegate { DdemlObject.StartAdvise(item, format, hot, acknowledge, timeout, adviseState); };
+            void InnerStartAdvice()
+            {
+                DdemlObject.StartAdvise(item, format, hot, acknowledge, timeout, adviseState);
+            }
 
             try
             {
-                Context.Invoke(method);
+                Context.Invoke(InnerStartAdvice);
             }
             catch (DdemlException e)
             {
@@ -1301,10 +1542,78 @@ namespace NDde.Client
             }
         }
 
-        /// <overloads>
-        ///     <summary>
-        ///     </summary>
-        /// </overloads>
+        /// <summary>
+        ///     This begins an asynchronous operation to initiate an advise loop on the specified item name.
+        /// </summary>
+        /// <param name="item">
+        ///     An item name supported by the current conversation.
+        /// </param>
+        /// <param name="format">
+        ///     The format of the data to be returned.
+        /// </param>
+        /// <param name="hot">
+        ///     A bool indicating whether data should be included with the notification.
+        /// </param>
+        /// <returns>
+        ///     An <c>Task</c> object for this operation.
+        /// </returns>
+        /// <event cref="Advise" />
+        /// <exception cref="ArgumentException">
+        ///     This is thown when item exceeds 255 characters.
+        /// </exception>
+        /// <exception cref="ArgumentNullException">
+        ///     This is thrown when item is a null reference.
+        /// </exception>
+        /// <exception cref="InvalidOperationException">
+        ///     This is thrown when the item is already being advised or when the client is not connected.
+        /// </exception>
+        /// <exception cref="DdeException">
+        ///     This is thrown when the asynchronous operation could not begin.
+        /// </exception>
+        public virtual Task StartAdviseAsync(string item, int format, bool hot)
+        {
+            return StartAdviseAsync(item, format, hot, true, null);
+        }
+
+        /// <summary>
+        ///     This begins an asynchronous operation to initiate an advise loop on the specified item name.
+        /// </summary>
+        /// <param name="item">
+        ///     An item name supported by the current conversation.
+        /// </param>
+        /// <param name="format">
+        ///     The format of the data to be returned.
+        /// </param>
+        /// <param name="hot">
+        ///     A bool indicating whether data should be included with the notification.
+        /// </param>
+        /// <param name="acknowledge">
+        ///     A bool indicating whether the client should acknowledge each advisory before the server will send send another.
+        /// </param>
+        /// <param name="adviseState">
+        ///     An application defined data object to associate with this advise loop.
+        /// </param>
+        /// <returns>
+        ///     An <c>Task</c> object for this operation.
+        /// </returns>
+        /// <event cref="Advise" />
+        /// <exception cref="ArgumentException">
+        ///     This is thown when item exceeds 255 characters.
+        /// </exception>
+        /// <exception cref="ArgumentNullException">
+        ///     This is thrown when item is a null reference.
+        /// </exception>
+        /// <exception cref="InvalidOperationException">
+        ///     This is thrown when the item is already being advised or when the client is not connected.
+        /// </exception>
+        /// <exception cref="DdeException">
+        ///     This is thrown when the asynchronous operation could not begin.
+        /// </exception>
+        public virtual Task StartAdviseAsync(string item, int format, bool hot, bool acknowledge, object adviseState)
+        {
+            return Task.Factory.FromAsync(BeginStartAdvise(item, format, hot, acknowledge, null, null, adviseState), EndStartAdvise);
+        }
+
         /// <summary>
         ///     This begins an asynchronous operation to initiate an advise loop on the specified item name.
         /// </summary>
@@ -1388,19 +1697,16 @@ namespace NDde.Client
         public virtual IAsyncResult BeginStartAdvise(string item, int format, bool hot, bool acknowledge,
             AsyncCallback callback, object asyncState, object adviseState)
         {
-            var ar = new AsyncResult(Context);
-            ar.Callback = callback;
-            ar.State = asyncState;
+            var ar = new AsyncResult(Context) {Callback = callback, State = asyncState};
 
-            ThreadStart method = delegate
+            void InnerBeginStartAdvise()
             {
-                ar.DdemlAsyncResult = DdemlObject.BeginStartAdvise(item, format, hot, acknowledge,
-                    OnStartAdviseComplete, ar, adviseState);
-            };
+                ar.DdemlAsyncResult = DdemlObject.BeginStartAdvise(item, format, hot, acknowledge, OnStartAdviseComplete, ar, adviseState);
+            }
 
             try
             {
-                Context.Invoke(method);
+                Context.Invoke(InnerBeginStartAdvise);
             }
             catch (DdemlException e)
             {
@@ -1431,17 +1737,17 @@ namespace NDde.Client
         /// </exception>
         public virtual void EndStartAdvise(IAsyncResult asyncResult)
         {
-            ThreadStart method = delegate
+            void InnerEndStartAdvise()
             {
-                if (asyncResult is AsyncResult)
-                    DdemlObject.EndStartAdvise(((AsyncResult) asyncResult).DdemlAsyncResult);
+                if (asyncResult is AsyncResult result)
+                    DdemlObject.EndStartAdvise(result.DdemlAsyncResult);
                 else
                     DdemlObject.EndStartAdvise(InvalidAsyncResult.Instance);
-            };
+            }
 
             try
             {
-                Context.Invoke(method);
+                Context.Invoke(InnerEndStartAdvise);
             }
             catch (DdemlException e)
             {
@@ -1479,11 +1785,14 @@ namespace NDde.Client
         /// </exception>
         public virtual void StopAdvise(string item, int timeout)
         {
-            ThreadStart method = delegate { DdemlObject.StopAdvise(item, timeout); };
+            void InnerStopAdvise()
+            {
+                DdemlObject.StopAdvise(item, timeout);
+            }
 
             try
             {
-                Context.Invoke(method);
+                Context.Invoke(InnerStopAdvise);
             }
             catch (DdemlException e)
             {
@@ -1493,6 +1802,32 @@ namespace NDde.Client
             {
                 throw new ObjectDisposedException(GetType().ToString(), e);
             }
+        }
+
+        /// <summary>
+        ///     This begins an asynchronous operation to terminate the advise loop for the specified item name.
+        /// </summary>
+        /// <param name="item">
+        ///     An item name that has an active advise loop.
+        /// </param>
+        /// <returns>
+        ///     An <c>Task</c> object for this operation.
+        /// </returns>
+        /// <exception cref="ArgumentException">
+        ///     This is thown when item exceeds 255 characters.
+        /// </exception>
+        /// <exception cref="ArgumentNullException">
+        ///     This is thrown when item is a null reference.
+        /// </exception>
+        /// <exception cref="InvalidOperationException">
+        ///     This is thrown when the item is not being advised or when the client is not connected.
+        /// </exception>
+        /// <exception cref="DdeException">
+        ///     This is thrown when the asynchronous operation could not begin.
+        /// </exception>
+        public virtual Task StopAdviseAsync(string item)
+        {
+            return Task.Factory.FromAsync(BeginStopAdvise(item, null, null), EndStopAdvise);
         }
 
         /// <summary>
@@ -1524,15 +1859,16 @@ namespace NDde.Client
         /// </exception>
         public virtual IAsyncResult BeginStopAdvise(string item, AsyncCallback callback, object state)
         {
-            var ar = new AsyncResult(Context);
-            ar.Callback = callback;
-            ar.State = state;
+            var ar = new AsyncResult(Context) {Callback = callback, State = state};
 
-            ThreadStart method = delegate { ar.DdemlAsyncResult = DdemlObject.BeginStopAdvise(item, OnStopAdviseComplete, ar); };
+            void InnerBeginStopAdvise()
+            {
+                ar.DdemlAsyncResult = DdemlObject.BeginStopAdvise(item, OnStopAdviseComplete, ar);
+            }
 
             try
             {
-                Context.Invoke(method);
+                Context.Invoke(InnerBeginStopAdvise);
             }
             catch (DdemlException e)
             {
@@ -1563,17 +1899,17 @@ namespace NDde.Client
         /// </exception>
         public virtual void EndStopAdvise(IAsyncResult asyncResult)
         {
-            ThreadStart method = delegate
+            void InnerEndStopAdvise()
             {
-                if (asyncResult is AsyncResult)
-                    DdemlObject.EndStopAdvise(((AsyncResult) asyncResult).DdemlAsyncResult);
+                if (asyncResult is AsyncResult result)
+                    DdemlObject.EndStopAdvise(result.DdemlAsyncResult);
                 else
                     DdemlObject.EndStopAdvise(InvalidAsyncResult.Instance);
-            };
+            }
 
             try
             {
-                Context.Invoke(method);
+                Context.Invoke(InnerEndStopAdvise);
             }
             catch (DdemlException e)
             {
@@ -1588,36 +1924,31 @@ namespace NDde.Client
         private void OnExecuteComplete(IAsyncResult asyncResult)
         {
             var ar = (AsyncResult) asyncResult.AsyncState;
-            if (ar.Callback != null)
-                ar.Callback(ar);
+            ar?.Callback?.Invoke(ar);
         }
 
         private void OnPokeComplete(IAsyncResult asyncResult)
         {
             var ar = (AsyncResult) asyncResult.AsyncState;
-            if (ar.Callback != null)
-                ar.Callback(ar);
+            ar?.Callback?.Invoke(ar);
         }
 
         private void OnRequestComplete(IAsyncResult asyncResult)
         {
             var ar = (AsyncResult) asyncResult.AsyncState;
-            if (ar.Callback != null)
-                ar.Callback(ar);
+            ar?.Callback?.Invoke(ar);
         }
 
         private void OnStartAdviseComplete(IAsyncResult asyncResult)
         {
             var ar = (AsyncResult) asyncResult.AsyncState;
-            if (ar.Callback != null)
-                ar.Callback(ar);
+            ar?.Callback?.Invoke(ar);
         }
 
         private void OnStopAdviseComplete(IAsyncResult asyncResult)
         {
             var ar = (AsyncResult) asyncResult.AsyncState;
-            if (ar.Callback != null)
-                ar.Callback(ar);
+            ar?.Callback?.Invoke(ar);
         }
 
         private void OnAdviseReceived(object sender, DdemlAdviseEventArgs internalArgs)
@@ -1631,8 +1962,7 @@ namespace NDde.Client
                 copy = _AdviseEvent;
             }
 
-            if (copy != null)
-                copy(this, new DdeAdviseEventArgs(internalArgs, Context.Encoding));
+            copy?.Invoke(this, new DdeAdviseEventArgs(internalArgs, Context.Encoding));
         }
 
         private void OnDisconnected(object sender, DdemlDisconnectedEventArgs internalArgs)
@@ -1646,8 +1976,7 @@ namespace NDde.Client
                 copy = _DisconnectedEvent;
             }
 
-            if (copy != null)
-                copy(this, new DdeDisconnectedEventArgs(internalArgs));
+            copy?.Invoke(this, new DdeDisconnectedEventArgs(internalArgs));
         }
 
         private void OnStateChange(object sender, EventArgs args)
@@ -1694,13 +2023,13 @@ namespace NDde.Client
             {
             }
 
-            public static InvalidAsyncResult Instance { get; } = new InvalidAsyncResult();
+            public static InvalidAsyncResult Instance { get; } = new();
 
             public object AsyncState => null;
 
             public bool CompletedSynchronously => false;
 
-            public WaitHandle AsyncWaitHandle => null;
+            public WaitHandle AsyncWaitHandle => null!;
 
             public bool IsCompleted => false;
         } // class

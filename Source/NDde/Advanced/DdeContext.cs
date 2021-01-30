@@ -35,7 +35,6 @@
 
 using System;
 using System.ComponentModel;
-using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
@@ -43,7 +42,6 @@ using System.Windows.Forms;
 using NDde.Internal;
 using NDde.Internal.Advanced;
 using NDde.Internal.Utility;
-using ThreadState = System.Threading.ThreadState;
 
 namespace NDde.Advanced
 {
@@ -91,18 +89,18 @@ namespace NDde.Advanced
     {
         //internal static EventLog EventLogWriter = CreateEventsLogger.CreaterEventLogger("NDDE Events", "NdDeEventsLog");
         private static DdeContext _Instance;
-        private static readonly object _InstanceLock = new object();
+        private static readonly object _InstanceLock = new();
 
         private static readonly WeakReferenceDictionary<ISynchronizeInvoke, DdeContext> _Instances =
-            new WeakReferenceDictionary<ISynchronizeInvoke, DdeContext>();
+            new();
+
+        private readonly object _LockObject = new();
 
         private DdemlContext _DdemlObject; // This has lazy initialization through a property.
         private Encoding _Encoding; // This is a cached DdemlContext property.
 
         private int _InstanceId; // This is a cached DdemlContext property.
         private bool _IsInitialized; // This is a cached DdemlContext property.
-
-        private readonly object _LockObject = new object();
 
         private EventHandler<DdeRegistrationEventArgs> _RegisterEvent;
         private ISynchronizeInvoke _Synchronizer;
@@ -150,9 +148,7 @@ namespace NDde.Advanced
             {
                 lock (_LockObject)
                 {
-                    if (_Synchronizer == null)
-                        _Synchronizer = new DdeThread();
-                    return _Synchronizer;
+                    return _Synchronizer ??= new DdeThread();
                 }
             }
             set
@@ -172,13 +168,11 @@ namespace NDde.Advanced
             {
                 lock (_LockObject)
                 {
-                    if (_DdemlObject == null)
-                    {
-                        _DdemlObject = new DdemlContext();
-                        _DdemlObject.Register += OnRegister;
-                        _DdemlObject.Unregister += OnUnregister;
-                        _DdemlObject.StateChange += OnStateChange;
-                    }
+                    if (_DdemlObject != null) return _DdemlObject;
+                    _DdemlObject = new DdemlContext();
+                    _DdemlObject.Register += OnRegister;
+                    _DdemlObject.Unregister += OnUnregister;
+                    _DdemlObject.StateChange += OnStateChange;
 
                     return _DdemlObject;
                 }
@@ -232,23 +226,22 @@ namespace NDde.Advanced
             {
                 lock (_LockObject)
                 {
-                    if (_Encoding == null)
-                    {
-                        Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
-                        _Encoding = Encoding.GetEncoding(1252);
-                    }
+                    if (_Encoding != null) return _Encoding;
+                    Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+                    _Encoding = Encoding.GetEncoding(1252);
+
                     return _Encoding;
                 }
             }
             set
             {
-                ThreadStart method = delegate
+                void InnerEncoding()
                 {
                     DdemlObject.Encoding = value;
                     _Encoding = value;
-                };
+                }
 
-                Invoke(method);
+                Invoke(InnerEncoding);
             }
         }
 
@@ -317,31 +310,25 @@ namespace NDde.Advanced
         {
             lock (_InstanceLock)
             {
-                if (_Instance == null)
-                    _Instance = new DdeContext();
-                return _Instance;
+                return _Instance ??= new DdeContext();
             }
         }
 
         internal static DdeContext GetDefault(ISynchronizeInvoke synchronizingObject)
         {
-            if (synchronizingObject != null)
-                lock (_Instances)
-                {
-                    var context = _Instances[synchronizingObject];
-                    if (context == null)
-                    {
-                        if (synchronizingObject is DdeContext)
-                            context = synchronizingObject as DdeContext;
-                        else
-                            context = new DdeContext(synchronizingObject);
-                        _Instances.Add(synchronizingObject, context);
-                    }
+            if (synchronizingObject == null) return GetDefault();
+            lock (_Instances)
+            {
+                var context = _Instances[synchronizingObject];
+                if (context != null) return context;
+                if (synchronizingObject is DdeContext ddeContext)
+                    context = ddeContext;
+                else
+                    context = new DdeContext(synchronizingObject);
+                _Instances.Add(synchronizingObject, context);
 
-                    return context;
-                }
-
-            return GetDefault();
+                return context;
+            }
         }
 
         /// <summary>
@@ -394,23 +381,24 @@ namespace NDde.Advanced
 
         private void Dispose(bool disposing)
         {
-            if (disposing)
+            if (!disposing) return;
+
+            void InnerDispose()
             {
-                ThreadStart method = delegate { DdemlObject.Dispose(); };
+                DdemlObject.Dispose();
+            }
 
-                try
-                {
-                    Invoke(method);
+            try
+            {
+                Invoke(InnerDispose);
 
-                    // Dispose the synchronizer if it was created internally.
-                    var synchronizer = Synchronizer as DdeThread;
-                    if (synchronizer != null)
-                        synchronizer.Dispose();
-                }
-                catch
-                {
-                    // Swallow any exception that occurs.
-                }
+                // Dispose the synchronizer if it was created internally.
+                var synchronizer = Synchronizer as DdeThread;
+                synchronizer?.Dispose();
+            }
+            catch
+            {
+                // Swallow any exception that occurs.
             }
         }
 
@@ -445,16 +433,16 @@ namespace NDde.Advanced
         /// </remarks>
         public void Initialize()
         {
-            ThreadStart method = delegate
+            void InnerInitialize()
             {
                 DdemlObject.Initialize();
                 _InstanceId = DdemlObject.InstanceId;
                 _IsInitialized = DdemlObject.IsInitialized;
-            };
+            }
 
             try
             {
-                Invoke(method);
+                Invoke(InnerInitialize);
             }
             catch (DdemlException e)
             {
@@ -490,15 +478,15 @@ namespace NDde.Advanced
         /// </remarks>
         public void AddTransactionFilter(IDdeTransactionFilter filter)
         {
-            ThreadStart method = delegate
+            void InnerAddTransactionFilter()
             {
                 IDdemlTransactionFilter tf = filter == null ? null : new DdemlTransactionFilter(filter);
                 DdemlObject.AddTransactionFilter(tf);
-            };
+            }
 
             try
             {
-                Invoke(method);
+                Invoke(InnerAddTransactionFilter);
             }
             catch (ObjectDisposedException e)
             {
@@ -530,15 +518,15 @@ namespace NDde.Advanced
         /// </remarks>
         public void RemoveTransactionFilter(IDdeTransactionFilter filter)
         {
-            ThreadStart method = delegate
+            void InnerRemoveTransactionFilter()
             {
                 IDdemlTransactionFilter tf = filter == null ? null : new DdemlTransactionFilter(filter);
                 DdemlObject.RemoveTransactionFilter(tf);
-            };
+            }
 
             try
             {
-                Invoke(method);
+                Invoke(InnerRemoveTransactionFilter);
             }
             catch (ObjectDisposedException e)
             {
@@ -568,8 +556,7 @@ namespace NDde.Advanced
                 copy = _RegisterEvent;
             }
 
-            if (copy != null)
-                copy(this, new DdeRegistrationEventArgs(internalArgs));
+            copy?.Invoke(this, new DdeRegistrationEventArgs(internalArgs));
         }
 
         private void OnUnregister(object sender, DdemlRegistrationEventArgs internalArgs)
@@ -583,8 +570,7 @@ namespace NDde.Advanced
                 copy = _UnregisterEvent;
             }
 
-            if (copy != null)
-                copy(this, new DdeRegistrationEventArgs(internalArgs));
+            copy?.Invoke(this, new DdeRegistrationEventArgs(internalArgs));
         }
 
         private void OnStateChange(object sender, EventArgs args)
@@ -613,8 +599,7 @@ namespace NDde.Advanced
 
             public override bool Equals(object obj)
             {
-                var target = obj as DdemlTransactionFilter;
-                if (target != null)
+                if (obj is DdemlTransactionFilter target)
                     return _OuterFilter.Equals(target._OuterFilter);
                 return false;
             }
@@ -630,9 +615,9 @@ namespace NDde.Advanced
         {
             private readonly Form _Form;
 
-            private readonly ManualResetEvent _Initialized = new ManualResetEvent(false);
+            private readonly ManualResetEvent _Initialized = new(false);
 
-            private readonly object _LockObject = new object();
+            private readonly object _LockObject = new();
             private readonly Thread _Thread;
 
             private int _ThreadId;
@@ -660,8 +645,12 @@ namespace NDde.Advanced
 
                 if (InvokeRequired)
                 {
-                    ThreadStart method = delegate { _Form.Dispose(); };
-                    Invoke(method, null);
+                    void InnerDispose()
+                    {
+                        _Form.Dispose();
+                    }
+
+                    Invoke((ThreadStart) InnerDispose, null);
                 }
                 else
                 {
@@ -691,19 +680,17 @@ namespace NDde.Advanced
                     }
                 }
 
-                if (InvokeRequired)
-                    try
-                    {
-                        return _Form.Invoke(method, args);
-                    }
-                    catch (InvalidOperationException e)
-                    {
-                        if (!_Form.IsHandleCreated)
-                            throw new ObjectDisposedException(GetType().ToString(), e);
-                        throw;
-                    }
-
-                return method.DynamicInvoke(args);
+                if (!InvokeRequired) return method.DynamicInvoke(args);
+                try
+                {
+                    return _Form.Invoke(method, args);
+                }
+                catch (InvalidOperationException e)
+                {
+                    if (!_Form.IsHandleCreated)
+                        throw new ObjectDisposedException(GetType().ToString(), e);
+                    throw;
+                }
             }
 
             public IAsyncResult BeginInvoke(Delegate method, object[] args)
@@ -772,7 +759,7 @@ namespace NDde.Advanced
                 {
                     get
                     {
-                        const int WS_POPUP = unchecked((int)0x80000000);
+                        const int WS_POPUP = unchecked((int) 0x80000000);
                         const int WS_EX_TOOLWINDOW = 0x80;
 
                         var cp = base.CreateParams;
@@ -789,13 +776,9 @@ namespace NDde.Advanced
 
                 private void HiddenForm_Load(object source, EventArgs e)
                 {
-                    if (Environment.OSVersion.Platform == PlatformID.Win32NT &&
-                        Environment.OSVersion.Version.Major >= 5)
-                    {
-                        // Make this a message only window if the OS is WinXP or higher.
-                        const int HWND_MESSAGE = -1;
-                        SetParent(Handle, new IntPtr(HWND_MESSAGE));
-                    }
+                    // Always create a hidden window
+                    const int HWND_MESSAGE = -1;
+                    SetParent(Handle, new IntPtr(HWND_MESSAGE));
                 }
             } // class
         } // class

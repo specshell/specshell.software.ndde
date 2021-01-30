@@ -56,11 +56,11 @@ namespace NDde.Internal.Client
             new Dictionary<int, AsyncResultBase>(); // Active DDEML transactions
 
         private readonly DdemlContext _Context; // DDEML instance manager
+        private readonly string _Service = ""; // DDEML service name
+        private readonly string _Topic = ""; // DDEML topic name
         private IntPtr _ConversationHandle = IntPtr.Zero; // DDEML conversation handle
         private int _InstanceId; // DDEML instance identifier
         private bool _Paused; // DDEML callback enabled?
-        private readonly string _Service = ""; // DDEML service name
-        private readonly string _Topic = ""; // DDEML topic name
 
         public DdemlClient(string service, string topic)
             : this(service, topic, DdemlContext.GetDefault())
@@ -70,19 +70,17 @@ namespace NDde.Internal.Client
         public DdemlClient(string service, string topic, DdemlContext context)
         {
             if (service == null)
-                throw new ArgumentNullException("service");
+                throw new ArgumentNullException(nameof(service));
             if (service.Length > Ddeml.MAX_STRING_SIZE)
-                throw new ArgumentException(Resources.StringParameterInvalidMessage, "service");
+                throw new ArgumentException(Resources.StringParameterInvalidMessage, nameof(service));
             if (topic == null)
-                throw new ArgumentNullException("topic");
+                throw new ArgumentNullException(nameof(topic));
             if (topic.Length > Ddeml.MAX_STRING_SIZE)
-                throw new ArgumentException(Resources.StringParameterInvalidMessage, "topic");
-            if (context == null)
-                throw new ArgumentNullException("context");
+                throw new ArgumentException(Resources.StringParameterInvalidMessage, nameof(topic));
 
             _Service = service;
             _Topic = topic;
-            _Context = context;
+            _Context = context ?? throw new ArgumentNullException(nameof(context));
         }
 
         public virtual string Service => _Service;
@@ -116,62 +114,66 @@ namespace NDde.Internal.Client
 
         protected virtual void Dispose(bool disposing)
         {
-            if (!IsDisposed)
+            if (IsDisposed) return;
+            IsDisposed = true;
+            if (disposing)
             {
-                IsDisposed = true;
-                if (disposing)
-                {
-                    if (IsConnected)
+                if (!IsConnected) return;
+                // Terminate the conversation.
+                ConversationManager.Disconnect(_ConversationHandle);
+
+                // Assign each active asynchronous transaction an exception so that the EndXXX methods do not deadlock.
+                foreach (var arb in _AsynchronousTransactionTable.Values)
+                    arb.Process(new DdemlException(Resources.NotConnectedMessage));
+
+                // Make sure the asynchronous transaction and advise loop tables are empty.
+                _AsynchronousTransactionTable.Clear();
+                _AdviseLoopTable.Clear();
+
+                // Unregister this client from the context so that it will not receive DDEML callbacks.
+                _Context.UnregisterClient(this);
+
+                // Indicate that this object is no longer connected or paused.
+                _Paused = false;
+                _ConversationHandle = IntPtr.Zero;
+                _InstanceId = 0;
+
+                // Raise the StateChange event.
+                if (StateChange != null)
+                    foreach (var handler in StateChange.GetInvocationList())
                     {
-                        // Terminate the conversation.
-                        ConversationManager.Disconnect(_ConversationHandle);
+                        if (handler is not EventHandler eventHandler) continue;
+                        try
+                        {
+                            eventHandler(this, EventArgs.Empty);
+                        }
+                        catch
+                        {
+                            // Swallow any exception that occurs.
+                        }
+                    }
 
-                        // Assign each active asynchronous transaction an exception so that the EndXXX methods do not deadlock.
-                        foreach (var arb in _AsynchronousTransactionTable.Values)
-                            arb.Process(new DdemlException(Resources.NotConnectedMessage));
-
-                        // Make sure the asynchronous transaction and advise loop tables are empty.
-                        _AsynchronousTransactionTable.Clear();
-                        _AdviseLoopTable.Clear();
-
-                        // Unregister this client from the context so that it will not receive DDEML callbacks.
-                        _Context.UnregisterClient(this);
-
-                        // Indicate that this object is no longer connected or paused.
-                        _Paused = false;
-                        _ConversationHandle = IntPtr.Zero;
-                        _InstanceId = 0;
-
-                        // Raise the StateChange event.
-                        foreach (EventHandler handler in StateChange.GetInvocationList())
-                            try
-                            {
-                                handler(this, EventArgs.Empty);
-                            }
-                            catch
-                            {
-                                // Swallow any exception that occurs.
-                            }
-
-                        // Raise the Disconnected event.
-                        foreach (EventHandler<DdemlDisconnectedEventArgs> handler in
-                            Disconnected.GetInvocationList())
-                            try
-                            {
-                                handler(this,
-                                    new DdemlDisconnectedEventArgs(false, true));
-                            }
-                            catch
-                            {
-                                // Swallow any exception that occurs.
-                            }
+                // Raise the Disconnected event.
+                if (Disconnected == null) return;
+                foreach (var handler in
+                    Disconnected.GetInvocationList())
+                {
+                    if (handler is not EventHandler<DdemlDisconnectedEventArgs> eventHandler) continue;
+                    try
+                    {
+                        eventHandler(this,
+                            new DdemlDisconnectedEventArgs(false, true));
+                    }
+                    catch
+                    {
+                        // Swallow any exception that occurs.
                     }
                 }
-                else
-                {
-                    if (IsConnected)
-                        ConversationManager.Disconnect(_ConversationHandle);
-                }
+            }
+            else
+            {
+                if (IsConnected)
+                    ConversationManager.Disconnect(_ConversationHandle);
             }
         }
 
@@ -181,18 +183,21 @@ namespace NDde.Internal.Client
 
             //EventLogWriter.WriteEntry($"Ddemlclient Connect 184: {error}", EventLogEntryType.Information);
 
-            if (error == -1)
-                throw new ObjectDisposedException(GetType().ToString());
-            if (error == -2)
-                throw new InvalidOperationException(Resources.AlreadyConnectedMessage);
-            if (error > Ddeml.DMLERR_NO_ERROR)
+            switch (error)
             {
-                var message = Resources.ConnectFailedMessage;
-                message = message.Replace("${service}", _Service);
-                message = message.Replace("${topic}", _Topic);
-                //EventLogWriter.WriteEntry($"Ddemlclient DMLERR_NO_ERROR 189: {message} - {error}", EventLogEntryType.Information);
+                case -1:
+                    throw new ObjectDisposedException(GetType().ToString());
+                case -2:
+                    throw new InvalidOperationException(Resources.AlreadyConnectedMessage);
+                case > Ddeml.DMLERR_NO_ERROR:
+                {
+                    var message = Resources.ConnectFailedMessage;
+                    message = message.Replace("${service}", _Service);
+                    message = message.Replace("${topic}", _Topic);
+                    //EventLogWriter.WriteEntry($"Ddemlclient DMLERR_NO_ERROR 189: {message} - {error}", EventLogEntryType.Information);
 
-                throw new DdemlException(message, error);
+                    throw new DdemlException(message, error);
+                }
             }
         }
 
@@ -221,8 +226,7 @@ namespace NDde.Internal.Client
             _Context.RegisterClient(this);
 
             // Raise the StateChange event.
-            if (StateChange != null)
-                StateChange(this, EventArgs.Empty);
+            StateChange?.Invoke(this, EventArgs.Empty);
 
             return Ddeml.DMLERR_NO_ERROR;
         }
@@ -254,12 +258,10 @@ namespace NDde.Internal.Client
             _InstanceId = 0;
 
             // Raise the StateChange event.
-            if (StateChange != null)
-                StateChange(this, EventArgs.Empty);
+            StateChange?.Invoke(this, EventArgs.Empty);
 
             // Raise the Disconnected event.
-            if (Disconnected != null)
-                Disconnected(this, new DdemlDisconnectedEventArgs(false, false));
+            Disconnected?.Invoke(this, new DdemlDisconnectedEventArgs(false, false));
         }
 
         public virtual void Pause()
@@ -285,8 +287,7 @@ namespace NDde.Internal.Client
             _Paused = true;
 
             // Raise the StateChange event.
-            if (StateChange != null)
-                StateChange(this, EventArgs.Empty);
+            StateChange?.Invoke(this, EventArgs.Empty);
         }
 
         public virtual void Resume()
@@ -312,8 +313,7 @@ namespace NDde.Internal.Client
             _Paused = false;
 
             // Raise the StateChange event.
-            if (StateChange != null)
-                StateChange(this, EventArgs.Empty);
+            StateChange?.Invoke(this, EventArgs.Empty);
         }
 
         public virtual void Abandon(IAsyncResult asyncResult)
@@ -323,40 +323,41 @@ namespace NDde.Internal.Client
             if (!IsConnected)
                 throw new InvalidOperationException(Resources.NotConnectedMessage);
             if (!(asyncResult is AsyncResultBase))
-                throw new ArgumentException(Resources.AsyncResultParameterInvalidMessage, "asyncResult");
+                throw new ArgumentException(Resources.AsyncResultParameterInvalidMessage, nameof(asyncResult));
 
             var arb = (AsyncResultBase) asyncResult;
-            if (!arb.IsCompleted)
-            {
-                // Abandon the asynchronous transaction.
-                var result =
-                    Ddeml.DdeAbandonTransaction(_InstanceId, _ConversationHandle, arb.TransactionId);
+            if (arb.IsCompleted) return;
+            // Abandon the asynchronous transaction.
+            var result =
+                Ddeml.DdeAbandonTransaction(_InstanceId, _ConversationHandle, arb.TransactionId);
 
-                // Remove the IAsyncResult from the transaction table.
-                if (_AsynchronousTransactionTable.ContainsKey(arb.TransactionId))
-                    _AsynchronousTransactionTable.Remove(arb.TransactionId);
-            }
+            // Remove the IAsyncResult from the transaction table.
+            if (_AsynchronousTransactionTable.ContainsKey(arb.TransactionId))
+                _AsynchronousTransactionTable.Remove(arb.TransactionId);
         }
 
         public virtual void Execute(string command, int timeout)
         {
             var error = TryExecute(command, timeout);
 
-            if (error == -1)
-                throw new ObjectDisposedException(GetType().ToString());
-            if (error == -2)
-                throw new InvalidOperationException(Resources.NotConnectedMessage);
-            if (error == -3 && command == null)
-                throw new ArgumentNullException("command");
-            if (error == -3 && command.Length > Ddeml.MAX_STRING_SIZE)
-                throw new ArgumentException(Resources.StringParameterInvalidMessage, "command");
-            if (error == -3 && timeout <= 0)
-                throw new ArgumentException(Resources.TimeoutParameterInvalidMessage, "timeout");
-            if (error > Ddeml.DMLERR_NO_ERROR)
+            switch (error)
             {
-                var message = Resources.ExecuteFailedMessage;
-                message = message.Replace("${command}", command);
-                throw new DdemlException(message, error);
+                case -1:
+                    throw new ObjectDisposedException(GetType().ToString());
+                case -2:
+                    throw new InvalidOperationException(Resources.NotConnectedMessage);
+                case -3 when command == null:
+                    throw new ArgumentNullException(nameof(command));
+                case -3 when command.Length > Ddeml.MAX_STRING_SIZE:
+                    throw new ArgumentException(Resources.StringParameterInvalidMessage, nameof(command));
+                case -3 when timeout <= 0:
+                    throw new ArgumentException(Resources.TimeoutParameterInvalidMessage, nameof(timeout));
+                case > Ddeml.DMLERR_NO_ERROR:
+                {
+                    var message = Resources.ExecuteFailedMessage;
+                    message = message.Replace("${command}", command);
+                    throw new DdemlException(message, error);
+                }
             }
         }
 
@@ -389,10 +390,7 @@ namespace NDde.Internal.Client
                 ref returnFlags);
 
             // If the result is null then the server did not process the command.
-            if (result == IntPtr.Zero)
-                return Ddeml.DdeGetLastError(_InstanceId);
-
-            return Ddeml.DMLERR_NO_ERROR;
+            return result == IntPtr.Zero ? Ddeml.DdeGetLastError(_InstanceId) : Ddeml.DMLERR_NO_ERROR;
         }
 
         public virtual IAsyncResult BeginExecute(string command, AsyncCallback callback, object state)
@@ -402,9 +400,9 @@ namespace NDde.Internal.Client
             if (!IsConnected)
                 throw new InvalidOperationException(Resources.NotConnectedMessage);
             if (command == null)
-                throw new ArgumentNullException("command");
+                throw new ArgumentNullException(nameof(command));
             if (command.Length > Ddeml.MAX_STRING_SIZE)
-                throw new ArgumentException(Resources.StringParameterInvalidMessage, "command");
+                throw new ArgumentException(Resources.StringParameterInvalidMessage, nameof(command));
 
             // Convert the command to a byte array with a null terminating character.
             var data = _Context.Encoding.GetBytes(command + "\0");
@@ -431,11 +429,10 @@ namespace NDde.Internal.Client
             }
 
             // Create an IAsyncResult for this asynchronous operation and add it to the asynchronous transaction table.
-            var ar = new ExecuteAsyncResult(this);
-            ar.Command = command;
-            ar.Callback = callback;
-            ar.AsyncState = state;
-            ar.TransactionId = transactionId;
+            var ar = new ExecuteAsyncResult(this)
+            {
+                Command = command, Callback = callback, AsyncState = state, TransactionId = transactionId,
+            };
             _AsynchronousTransactionTable.Add(transactionId, ar);
 
             return ar;
@@ -448,8 +445,8 @@ namespace NDde.Internal.Client
             if (!(asyncResult is ExecuteAsyncResult))
             {
                 var message = Resources.AsyncResultParameterInvalidMessage;
-                message = message.Replace("${method}", MethodBase.GetCurrentMethod().Name);
-                throw new ArgumentException(message, "asyncResult");
+                message = message.Replace("${method}", MethodBase.GetCurrentMethod()?.Name);
+                throw new ArgumentException(message, nameof(asyncResult));
             }
 
             var ar = (ExecuteAsyncResult) asyncResult;
@@ -463,25 +460,28 @@ namespace NDde.Internal.Client
         {
             var error = TryPoke(item, data, format, timeout);
 
-            if (error == -1)
-                throw new ObjectDisposedException(GetType().ToString());
-            if (error == -2)
-                throw new InvalidOperationException(Resources.NotConnectedMessage);
-            if (error == -3 && data == null)
-                throw new ArgumentNullException("data");
-            if (error == -3 && item == null)
-                throw new ArgumentNullException("item");
-            if (error == -3 && item.Length > Ddeml.MAX_STRING_SIZE)
-                throw new ArgumentException(Resources.StringParameterInvalidMessage, "item");
-            if (error == -3 && timeout <= 0)
-                throw new ArgumentException(Resources.TimeoutParameterInvalidMessage, "timeout");
-            if (error > Ddeml.DMLERR_NO_ERROR)
+            switch (error)
             {
-                var message = Resources.PokeFailedMessage;
-                message = message.Replace("${service}", _Service);
-                message = message.Replace("${topic}", _Topic);
-                message = message.Replace("${item}", item);
-                throw new DdemlException(message, error);
+                case -1:
+                    throw new ObjectDisposedException(GetType().ToString());
+                case -2:
+                    throw new InvalidOperationException(Resources.NotConnectedMessage);
+                case -3 when data == null:
+                    throw new ArgumentNullException(nameof(data));
+                case -3 when item == null:
+                    throw new ArgumentNullException(nameof(item));
+                case -3 when item.Length > Ddeml.MAX_STRING_SIZE:
+                    throw new ArgumentException(Resources.StringParameterInvalidMessage, nameof(item));
+                case -3 when timeout <= 0:
+                    throw new ArgumentException(Resources.TimeoutParameterInvalidMessage, nameof(timeout));
+                case > Ddeml.DMLERR_NO_ERROR:
+                {
+                    var message = Resources.PokeFailedMessage;
+                    message = message.Replace("${service}", _Service);
+                    message = message.Replace("${topic}", _Topic);
+                    message = message.Replace("${item}", item);
+                    throw new DdemlException(message, error);
+                }
             }
         }
 
@@ -546,11 +546,11 @@ namespace NDde.Internal.Client
             if (!IsConnected)
                 throw new InvalidOperationException(Resources.NotConnectedMessage);
             if (data == null)
-                throw new ArgumentNullException("data");
+                throw new ArgumentNullException(nameof(data));
             if (item == null)
-                throw new ArgumentNullException("item");
+                throw new ArgumentNullException(nameof(item));
             if (item.Length > Ddeml.MAX_STRING_SIZE)
-                throw new ArgumentException(Resources.StringParameterInvalidMessage, "item");
+                throw new ArgumentException(Resources.StringParameterInvalidMessage, nameof(item));
 
             // Create a string handle for the item name.
             var itemHandle = Ddeml.DdeCreateStringHandle(_InstanceId, item, Ddeml.CP_WINANSI);
@@ -596,12 +596,14 @@ namespace NDde.Internal.Client
                 }
 
                 // Create an IAsyncResult for the asynchronous operation and add it to the asynchronous transaction table.
-                var ar = new PokeAsyncResult(this);
-                ar.Item = item;
-                ar.Format = format;
-                ar.Callback = callback;
-                ar.AsyncState = state;
-                ar.TransactionId = transactionId;
+                var ar = new PokeAsyncResult(this)
+                {
+                    Item = item,
+                    Format = format,
+                    Callback = callback,
+                    AsyncState = state,
+                    TransactionId = transactionId,
+                };
                 _AsynchronousTransactionTable.Add(transactionId, ar);
 
                 return ar;
@@ -621,7 +623,7 @@ namespace NDde.Internal.Client
             {
                 var message = Resources.AsyncResultParameterInvalidMessage;
                 message = message.Replace("${method}", MethodBase.GetCurrentMethod().Name);
-                throw new ArgumentException(message, "asyncResult");
+                throw new ArgumentException(message, nameof(asyncResult));
             }
 
             var ar = (PokeAsyncResult) asyncResult;
@@ -633,30 +635,31 @@ namespace NDde.Internal.Client
 
         public virtual byte[] Request(string item, int format, int timeout)
         {
-            byte[] data;
+            var error = TryRequest(item, format, timeout, out var data);
 
-            var error = TryRequest(item, format, timeout, out data);
-
-            if (error == -1)
-                throw new ObjectDisposedException(GetType().ToString());
-            if (error == -2)
-                throw new InvalidOperationException(Resources.NotConnectedMessage);
-            if (error == -3 && item == null)
-                throw new ArgumentNullException("item");
-            if (error == -3 && item.Length > Ddeml.MAX_STRING_SIZE)
-                throw new ArgumentException(Resources.StringParameterInvalidMessage, "item");
-            if (error == -3 && timeout <= 0)
-                throw new ArgumentException(Resources.TimeoutParameterInvalidMessage, "timeout");
-            if (error > Ddeml.DMLERR_NO_ERROR)
+            switch (error)
             {
-                var message = Resources.RequestFailedMessage;
-                message = message.Replace("${service}", _Service);
-                message = message.Replace("${topic}", _Topic);
-                message = message.Replace("${item}", item);
-                throw new DdemlException(message, error);
+                case -1:
+                    throw new ObjectDisposedException(GetType().ToString());
+                case -2:
+                    throw new InvalidOperationException(Resources.NotConnectedMessage);
+                case -3 when item == null:
+                    throw new ArgumentNullException(nameof(item));
+                case -3 when item.Length > Ddeml.MAX_STRING_SIZE:
+                    throw new ArgumentException(Resources.StringParameterInvalidMessage, nameof(item));
+                case -3 when timeout <= 0:
+                    throw new ArgumentException(Resources.TimeoutParameterInvalidMessage, nameof(timeout));
+                case > Ddeml.DMLERR_NO_ERROR:
+                {
+                    var message = Resources.RequestFailedMessage;
+                    message = message.Replace("${service}", _Service);
+                    message = message.Replace("${topic}", _Topic);
+                    message = message.Replace("${item}", item);
+                    throw new DdemlException(message, error);
+                }
+                default:
+                    return data;
             }
-
-            return data;
         }
 
         public virtual int TryRequest(string item, int format, int timeout, out byte[] data)
@@ -714,9 +717,9 @@ namespace NDde.Internal.Client
             if (!IsConnected)
                 throw new InvalidOperationException(Resources.NotConnectedMessage);
             if (item == null)
-                throw new ArgumentNullException("item");
+                throw new ArgumentNullException(nameof(item));
             if (item.Length > Ddeml.MAX_STRING_SIZE)
-                throw new ArgumentException(Resources.StringParameterInvalidMessage, "item");
+                throw new ArgumentException(Resources.StringParameterInvalidMessage, nameof(item));
 
             // Create a string handle for the item name.
             var itemHandle = Ddeml.DdeCreateStringHandle(_InstanceId, item, Ddeml.CP_WINANSI);
@@ -749,12 +752,14 @@ namespace NDde.Internal.Client
             }
 
             // Create an IAsyncResult for the asynchronous operation and add it to the asynchronous transaction table.
-            var ar = new RequestAsyncResult(this);
-            ar.Item = item;
-            ar.Format = format;
-            ar.Callback = callback;
-            ar.AsyncState = state;
-            ar.TransactionId = transactionId;
+            var ar = new RequestAsyncResult(this)
+            {
+                Item = item,
+                Format = format,
+                Callback = callback,
+                AsyncState = state,
+                TransactionId = transactionId,
+            };
             _AsynchronousTransactionTable.Add(transactionId, ar);
 
             return ar;
@@ -767,8 +772,8 @@ namespace NDde.Internal.Client
             if (!(asyncResult is RequestAsyncResult))
             {
                 var message = Resources.AsyncResultParameterInvalidMessage;
-                message = message.Replace("${method}", MethodBase.GetCurrentMethod().Name);
-                throw new ArgumentException(message, "asyncResult");
+                message = message.Replace("${method}", MethodBase.GetCurrentMethod()?.Name);
+                throw new ArgumentException(message, nameof(asyncResult));
             }
 
             var ar = (RequestAsyncResult) asyncResult;
@@ -788,11 +793,11 @@ namespace NDde.Internal.Client
             if (!IsConnected)
                 throw new InvalidOperationException(Resources.NotConnectedMessage);
             if (item == null)
-                throw new ArgumentNullException("item");
+                throw new ArgumentNullException(nameof(item));
             if (item.Length > Ddeml.MAX_STRING_SIZE)
-                throw new ArgumentException(Resources.StringParameterInvalidMessage, "item");
+                throw new ArgumentException(Resources.StringParameterInvalidMessage, nameof(item));
             if (timeout <= 0)
-                throw new ArgumentException(Resources.TimeoutParameterInvalidMessage, "timeout");
+                throw new ArgumentException(Resources.TimeoutParameterInvalidMessage, nameof(timeout));
             if (_AdviseLoopTable.ContainsKey(item))
             {
                 var message = Resources.AlreadyBeingAdvisedMessage;
@@ -806,10 +811,7 @@ namespace NDde.Internal.Client
             // The object is added to the advise loop table first because an advisory could come in synchronously during the call
             // DdeClientTransaction.  The assumption is that the advise loop will be initiated successfully.  If it is not then the object must
             // be removed from the advise loop table prior to leaving this method.
-            var adviseLoop = new AdviseLoop(this);
-            adviseLoop.Item = item;
-            adviseLoop.Format = format;
-            adviseLoop.State = adviseState;
+            var adviseLoop = new AdviseLoop(this) {Item = item, Format = format, State = adviseState};
             _AdviseLoopTable.Add(item, adviseLoop);
 
             // Determine whether the client should acknowledge an advisory before the server posts another.
@@ -837,7 +839,7 @@ namespace NDde.Internal.Client
             Ddeml.DdeFreeStringHandle(_InstanceId, itemHandle);
 
             // If the result is null then the server did not initate the advise loop.
-            if (result == IntPtr.Zero)
+            if (result != IntPtr.Zero) return;
             {
                 // Remove the AdviseLoop object created earlier from the advise loop table.  It is no longer valid.
                 _AdviseLoopTable.Remove(item);
@@ -859,9 +861,9 @@ namespace NDde.Internal.Client
             if (!IsConnected)
                 throw new InvalidOperationException(Resources.NotConnectedMessage);
             if (item == null)
-                throw new ArgumentNullException("item");
+                throw new ArgumentNullException(nameof(item));
             if (item.Length > Ddeml.MAX_STRING_SIZE)
-                throw new ArgumentException(Resources.StringParameterInvalidMessage, "item");
+                throw new ArgumentException(Resources.StringParameterInvalidMessage, nameof(item));
             if (_AdviseLoopTable.ContainsKey(item))
             {
                 var message = Resources.AlreadyBeingAdvisedMessage;
@@ -907,13 +909,15 @@ namespace NDde.Internal.Client
             }
 
             // Create an IAsyncResult for the asynchronous operation and add it to the asynchronous transaction table.
-            var ar = new StartAdviseAsyncResult(this);
-            ar.Item = item;
-            ar.Format = format;
-            ar.State = adviseState;
-            ar.Callback = callback;
-            ar.AsyncState = asyncState;
-            ar.TransactionId = transactionId;
+            var ar = new StartAdviseAsyncResult(this)
+            {
+                Item = item,
+                Format = format,
+                State = adviseState,
+                Callback = callback,
+                AsyncState = asyncState,
+                TransactionId = transactionId,
+            };
             _AsynchronousTransactionTable.Add(transactionId, ar);
 
             return ar;
@@ -926,8 +930,8 @@ namespace NDde.Internal.Client
             if (!(asyncResult is StartAdviseAsyncResult))
             {
                 var message = Resources.AsyncResultParameterInvalidMessage;
-                message = message.Replace("${method}", MethodBase.GetCurrentMethod().Name);
-                throw new ArgumentException(message, "asyncResult");
+                message = message.Replace("${method}", MethodBase.GetCurrentMethod()?.Name);
+                throw new ArgumentException(message, nameof(asyncResult));
             }
 
             var ar = (StartAdviseAsyncResult) asyncResult;
@@ -944,11 +948,11 @@ namespace NDde.Internal.Client
             if (!IsConnected)
                 throw new InvalidOperationException(Resources.NotConnectedMessage);
             if (item == null)
-                throw new ArgumentNullException("item");
+                throw new ArgumentNullException(nameof(item));
             if (item.Length > Ddeml.MAX_STRING_SIZE)
-                throw new ArgumentException(Resources.StringParameterInvalidMessage, "item");
+                throw new ArgumentException(Resources.StringParameterInvalidMessage, nameof(item));
             if (timeout <= 0)
-                throw new ArgumentException(Resources.TimeoutParameterInvalidMessage, "timeout");
+                throw new ArgumentException(Resources.TimeoutParameterInvalidMessage, nameof(timeout));
             if (!_AdviseLoopTable.ContainsKey(item))
             {
                 var message = Resources.NotBeingAdvisedMessage;
@@ -1001,9 +1005,9 @@ namespace NDde.Internal.Client
             if (!IsConnected)
                 throw new InvalidOperationException(Resources.NotConnectedMessage);
             if (item == null)
-                throw new ArgumentNullException("item");
+                throw new ArgumentNullException(nameof(item));
             if (item.Length > Ddeml.MAX_STRING_SIZE)
-                throw new ArgumentException(Resources.StringParameterInvalidMessage, "item");
+                throw new ArgumentException(Resources.StringParameterInvalidMessage, nameof(item));
             if (!_AdviseLoopTable.ContainsKey(item))
             {
                 var message = Resources.NotBeingAdvisedMessage;
@@ -1046,12 +1050,14 @@ namespace NDde.Internal.Client
             }
 
             // Create an IAsyncResult for the asyncronous operation and add it to the asynchronous transaction table.
-            var ar = new StopAdviseAsyncResult(this);
-            ar.Item = item;
-            ar.Format = adviseLoop.Format;
-            ar.Callback = callback;
-            ar.AsyncState = state;
-            ar.TransactionId = transactionId;
+            var ar = new StopAdviseAsyncResult(this)
+            {
+                Item = item,
+                Format = adviseLoop.Format,
+                Callback = callback,
+                AsyncState = state,
+                TransactionId = transactionId,
+            };
             _AsynchronousTransactionTable.Add(transactionId, ar);
 
             return ar;
@@ -1065,7 +1071,7 @@ namespace NDde.Internal.Client
             {
                 var message = Resources.AsyncResultParameterInvalidMessage;
                 message = message.Replace("${method}", MethodBase.GetCurrentMethod().Name);
-                throw new ArgumentException(message, "asyncResult");
+                throw new ArgumentException(message, nameof(asyncResult));
             }
 
             var ar = (StopAdviseAsyncResult) asyncResult;
@@ -1091,16 +1097,13 @@ namespace NDde.Internal.Client
                     var item = psz.ToString();
 
                     // Delegate processing to the advise loop object.
-                    if (_AdviseLoopTable.ContainsKey(item))
-                    {
-                        t.dwRet = _AdviseLoopTable[item]
-                            .Process(t.uType, t.uFmt, t.hConv, t.hsz1, t.hsz2, t.hData,
-                                t.dwData1, t.dwData2);
-                        return true;
-                    }
+                    if (!_AdviseLoopTable.ContainsKey(item)) return false;
+                    t.dwRet = _AdviseLoopTable[item]
+                        .Process(t.uType, t.uFmt, t.hConv, t.hsz1, t.hsz2, t.hData,
+                            t.dwData1, t.dwData2);
+                    return true;
 
                     // This transaction could not be processed here.
-                    return false;
                 }
                 case Ddeml.XTYP_XACT_COMPLETE:
                 {
@@ -1108,20 +1111,17 @@ namespace NDde.Internal.Client
                     var transactionId = t.dwData1.ToInt32();
 
                     // Get the IAsyncResult from the asynchronous transaction table and delegate processing to it.
-                    if (_AsynchronousTransactionTable.ContainsKey(transactionId))
-                    {
-                        var arb = _AsynchronousTransactionTable[transactionId];
+                    if (!_AsynchronousTransactionTable.ContainsKey(transactionId)) return false;
+                    var arb = _AsynchronousTransactionTable[transactionId];
 
-                        // Remove the IAsyncResult from the asynchronous transaction table.
-                        _AsynchronousTransactionTable.Remove(arb.TransactionId);
+                    // Remove the IAsyncResult from the asynchronous transaction table.
+                    _AsynchronousTransactionTable.Remove(arb.TransactionId);
 
-                        t.dwRet = arb.Process(t.uType, t.uFmt, t.hConv, t.hsz1, t.hsz2, t.hData,
-                            t.dwData1, t.dwData2);
-                        return true;
-                    }
+                    t.dwRet = arb.Process(t.uType, t.uFmt, t.hConv, t.hsz1, t.hsz2, t.hData,
+                        t.dwData1, t.dwData2);
+                    return true;
 
                     // This transaction could not be processed here.
-                    return false;
                 }
                 case Ddeml.XTYP_DISCONNECT:
                 {
@@ -1142,12 +1142,10 @@ namespace NDde.Internal.Client
                     _InstanceId = 0;
 
                     // Raise the StateChange event.
-                    if (StateChange != null)
-                        StateChange(this, EventArgs.Empty);
+                    StateChange?.Invoke(this, EventArgs.Empty);
 
                     // Raise the Disconnected event.
-                    if (Disconnected != null)
-                        Disconnected(this, new DdemlDisconnectedEventArgs(true, false));
+                    Disconnected?.Invoke(this, new DdemlDisconnectedEventArgs(true, false));
 
                     // Return zero to indicate that there are no problems.
                     t.dwRet = IntPtr.Zero;
@@ -1199,20 +1197,18 @@ namespace NDde.Internal.Client
                     Ddeml.DdeFreeStringHandle(instanceId, topicHandle);
                     Ddeml.DdeFreeStringHandle(instanceId, serviceHandle);
 
-                    if (handle != IntPtr.Zero)
+                    if (handle == IntPtr.Zero) return handle;
+                    // Make sure this thread has an IMessageFilter on it.
+                    var slot = Thread.GetNamedDataSlot(DataSlot);
+                    if (Thread.GetData(slot) == null)
                     {
-                        // Make sure this thread has an IMessageFilter on it.
-                        var slot = Thread.GetNamedDataSlot(DataSlot);
-                        if (Thread.GetData(slot) == null)
-                        {
-                            var filter = new ConversationManager();
-                            Application.AddMessageFilter(filter);
-                            Thread.SetData(slot, filter);
-                        }
-
-                        // Add an entry to the table that maps the conversation handle to the current thread.
-                        _Table.Add(handle, Ddeml.GetCurrentThreadId());
+                        var filter = new ConversationManager();
+                        Application.AddMessageFilter(filter);
+                        Thread.SetData(slot, filter);
                     }
+
+                    // Add an entry to the table that maps the conversation handle to the current thread.
+                    _Table.Add(handle, Ddeml.GetCurrentThreadId());
 
                     return handle;
                 }
@@ -1224,19 +1220,17 @@ namespace NDde.Internal.Client
                 // thread specific.  A message will be posted to the DDEML thread instead.
                 lock (_Table)
                 {
-                    if (_Table.ContainsKey(conversationHandle))
-                    {
-                        // Determine if the current thread matches what is in the table.
-                        var threadId = _Table[conversationHandle];
-                        if (threadId == Ddeml.GetCurrentThreadId())
-                            Ddeml.DdeDisconnect(conversationHandle);
-                        else
-                            PostThreadMessage(threadId, WM_APP + 2, conversationHandle,
-                                IntPtr.Zero);
+                    if (!_Table.ContainsKey(conversationHandle)) return;
+                    // Determine if the current thread matches what is in the table.
+                    var threadId = _Table[conversationHandle];
+                    if (threadId == Ddeml.GetCurrentThreadId())
+                        Ddeml.DdeDisconnect(conversationHandle);
+                    else
+                        PostThreadMessage(threadId, WM_APP + 2, conversationHandle,
+                            IntPtr.Zero);
 
-                        // Remove the conversation handle from the table because it is no longer in use.
-                        _Table.Remove(conversationHandle);
-                    }
+                    // Remove the conversation handle from the table because it is no longer in use.
+                    _Table.Remove(conversationHandle);
                 }
             }
         } // class
@@ -1259,23 +1253,21 @@ namespace NDde.Internal.Client
             public IntPtr Process(int uType, int uFmt, IntPtr hConv, IntPtr hsz1, IntPtr hsz2, IntPtr hData,
                 IntPtr dwData1, IntPtr dwData2)
             {
-                if (_Client.Advise != null)
+                if (_Client.Advise == null) return new IntPtr(Ddeml.DDE_FACK);
+                // Assume this is a warm advise (XTYPF_NODATA).
+                byte[] data = null;
+
+                // If the data handle is not null then it is a hot advise.
+                if (hData != IntPtr.Zero)
                 {
-                    // Assume this is a warm advise (XTYPF_NODATA).
-                    byte[] data = null;
-
-                    // If the data handle is not null then it is a hot advise.
-                    if (hData != IntPtr.Zero)
-                    {
-                        // Get the data from the data handle.
-                        var length = Ddeml.DdeGetData(hData, null, 0, 0);
-                        data = new byte[length];
-                        length = Ddeml.DdeGetData(hData, data, data.Length, 0);
-                    }
-
-                    // Raise the Advise event.
-                    _Client.Advise(_Client, new DdemlAdviseEventArgs(Item, Format, State, data));
+                    // Get the data from the data handle.
+                    var length = Ddeml.DdeGetData(hData, null, 0, 0);
+                    data = new byte[length];
+                    length = Ddeml.DdeGetData(hData, data, data.Length, 0);
                 }
+
+                // Raise the Advise event.
+                _Client.Advise(_Client, new DdemlAdviseEventArgs(Item, Format, State, data));
 
                 // Return DDE_FACK to indicate that are no problems.
                 return new IntPtr(Ddeml.DDE_FACK);
@@ -1284,7 +1276,7 @@ namespace NDde.Internal.Client
 
         private abstract class AsyncResultBase : IAsyncResult
         {
-            private readonly ManualResetEvent _CompletionEvent = new ManualResetEvent(false);
+            private readonly ManualResetEvent _CompletionEvent = new(false);
 
             public AsyncResultBase(DdemlClient client)
             {
@@ -1314,8 +1306,7 @@ namespace NDde.Internal.Client
                 // Mark this IAsyncResult as complete and invoke the callback.
                 IsCompleted = true;
                 _CompletionEvent.Set();
-                if (Callback != null)
-                    Callback(this);
+                Callback?.Invoke(this);
             }
 
             public IntPtr Process(int uType, int uFmt, IntPtr hConv, IntPtr hsz1, IntPtr hsz2, IntPtr hData,
@@ -1328,8 +1319,7 @@ namespace NDde.Internal.Client
                 // Mark this IAsyncResult as complete and invoke the callback.
                 IsCompleted = true;
                 _CompletionEvent.Set();
-                if (Callback != null)
-                    Callback(this);
+                Callback?.Invoke(this);
 
                 // The return value is sent to the DDEML.
                 return returnValue;
@@ -1357,12 +1347,10 @@ namespace NDde.Internal.Client
                 IntPtr dwData2)
             {
                 // If the data handle is null then the server did not process the command.
-                if (hData == IntPtr.Zero)
-                {
-                    var message = Resources.ExecuteFailedMessage;
-                    message = message.Replace("${command}", Command);
-                    ExceptionObject = new DdemlException(message);
-                }
+                if (hData != IntPtr.Zero) return IntPtr.Zero;
+                var message = Resources.ExecuteFailedMessage;
+                message = message.Replace("${command}", Command);
+                ExceptionObject = new DdemlException(message);
 
                 // Return zero to indicate that there are no problems.
                 return IntPtr.Zero;
@@ -1384,14 +1372,12 @@ namespace NDde.Internal.Client
                 IntPtr dwData2)
             {
                 // If the data handle is null then the server did not process the poke.
-                if (hData == IntPtr.Zero)
-                {
-                    var message = Resources.PokeFailedMessage;
-                    message = message.Replace("${service}", Client._Service);
-                    message = message.Replace("${topic}", Client._Topic);
-                    message = message.Replace("${item}", Item);
-                    ExceptionObject = new DdemlException(message);
-                }
+                if (hData != IntPtr.Zero) return IntPtr.Zero;
+                var message = Resources.PokeFailedMessage;
+                message = message.Replace("${service}", Client._Service);
+                message = message.Replace("${topic}", Client._Topic);
+                message = message.Replace("${item}", Item);
+                ExceptionObject = new DdemlException(message);
 
                 // Return zero to indicate that there are no problems.
                 return IntPtr.Zero;
@@ -1465,10 +1451,7 @@ namespace NDde.Internal.Client
                 else
                 {
                     // Create a AdviseLoop object to associate with this advise loop and add it to the owner's advise loop table.
-                    var adviseLoop = new AdviseLoop(Client);
-                    adviseLoop.Item = Item;
-                    adviseLoop.Format = Format;
-                    adviseLoop.State = State;
+                    var adviseLoop = new AdviseLoop(Client) {Item = Item, Format = Format, State = State};
                     Client._AdviseLoopTable.Add(Item, adviseLoop);
                 }
 
