@@ -431,7 +431,18 @@ namespace NDde.Client
         /// </exception>
         public virtual Task ConnectAsync()
         {
-            return Task.Factory.StartNew(Connect);
+            try
+            {
+                return Task.Factory.StartNew(Connect);
+            }
+            catch (DdemlException e)
+            {
+                throw new DdeException(e);
+            }
+            catch (ObjectDisposedException e)
+            {
+                throw new ObjectDisposedException(GetType().ToString(), e);
+            }
         }
 
         /// <summary>
@@ -513,7 +524,18 @@ namespace NDde.Client
         /// </exception>
         public virtual Task DisconnectAsync()
         {
-            return Task.Factory.StartNew(Disconnect);
+            try
+            {
+                return Task.Factory.StartNew(Disconnect);
+            }
+            catch (DdemlException e)
+            {
+                throw new DdeException(e);
+            }
+            catch (ObjectDisposedException e)
+            {
+                throw new ObjectDisposedException(GetType().ToString(), e);
+            }
         }
 
         /// <summary>
@@ -567,7 +589,18 @@ namespace NDde.Client
         /// </remarks>
         public virtual Task PauseAsync()
         {
-            return Task.Factory.StartNew(Pause);
+            try
+            {
+                return Task.Factory.StartNew(Pause);
+            }
+            catch (DdemlException e)
+            {
+                throw new DdeException(e);
+            }
+            catch (ObjectDisposedException e)
+            {
+                throw new ObjectDisposedException(GetType().ToString(), e);
+            }
         }
 
         /// <summary>
@@ -611,7 +644,18 @@ namespace NDde.Client
         /// </exception>
         public virtual Task ResumeAsync()
         {
-            return Task.Factory.StartNew(Resume);
+            try
+            {
+                return Task.Factory.StartNew(Resume);
+            }
+            catch (DdemlException e)
+            {
+                throw new DdeException(e);
+            }
+            catch (ObjectDisposedException e)
+            {
+                throw new ObjectDisposedException(GetType().ToString(), e);
+            }
         }
 
         /// <summary>
@@ -766,7 +810,18 @@ namespace NDde.Client
         /// </exception>
         public virtual Task ExecuteAsync(string command)
         {
-            return Task.Factory.FromAsync(BeginExecute(command, null, null), EndExecute);
+            try
+            {
+                return Task.Factory.FromAsync(BeginExecute(command, null, null), EndExecute);
+            }
+            catch (DdemlException e)
+            {
+                throw new DdeException(e);
+            }
+            catch (ObjectDisposedException e)
+            {
+                throw new ObjectDisposedException(GetType().ToString(), e);
+            }
         }
 
         /// <summary>
@@ -1018,7 +1073,18 @@ namespace NDde.Client
         /// </exception>
         public virtual Task PokeAsync(string item, string data)
         {
-            return PokeAsync(item, Context.Encoding.GetBytes(data + "\0"), 1);
+            try
+            {
+                return PokeAsync(item, Context.Encoding.GetBytes(data + "\0"), 1);
+            }
+            catch (DdemlException e)
+            {
+                throw new DdeException(e);
+            }
+            catch (ObjectDisposedException e)
+            {
+                throw new ObjectDisposedException(GetType().ToString(), e);
+            }
         }
 
         /// <summary>
@@ -1050,7 +1116,18 @@ namespace NDde.Client
         /// </exception>
         public virtual Task PokeAsync(string item, byte[] data, int format)
         {
-            return Task.Factory.FromAsync(BeginPoke(item, data, format, null, null), EndPoke);
+            try
+            {
+                return Task.Factory.FromAsync(BeginPoke(item, data, format, null, null), EndPoke);
+            }
+            catch (DdemlException e)
+            {
+                throw new DdeException(e);
+            }
+            catch (ObjectDisposedException e)
+            {
+                throw new ObjectDisposedException(GetType().ToString(), e);
+            }
         }
 
         /// <summary>
@@ -1340,7 +1417,18 @@ namespace NDde.Client
         /// </exception>
         public virtual Task<byte[]> RequestAsync(string item, int format)
         {
-            return Task.Factory.FromAsync(BeginRequest(item, format, null, null), EndRequest);
+            try
+            {
+                return Task.Factory.FromAsync(BeginRequest(item, format, null, null), EndRequest);
+            }
+            catch (DdemlException e)
+            {
+                throw new DdeException(e);
+            }
+            catch (ObjectDisposedException e)
+            {
+                throw new ObjectDisposedException(GetType().ToString(), e);
+            }
         }
 
         /// <summary>
@@ -1572,7 +1660,18 @@ namespace NDde.Client
         /// </exception>
         public virtual Task StartAdviseAsync(string item, int format, bool hot)
         {
-            return StartAdviseAsync(item, format, hot, true, null);
+            try
+            {
+                return StartAdviseAsync(item, format, hot, true, null);
+            }
+            catch (DdemlException e)
+            {
+                throw new DdeException(e);
+            }
+            catch (ObjectDisposedException e)
+            {
+                throw new ObjectDisposedException(GetType().ToString(), e);
+            }
         }
 
         /// <summary>
@@ -1611,7 +1710,18 @@ namespace NDde.Client
         /// </exception>
         public virtual Task StartAdviseAsync(string item, int format, bool hot, bool acknowledge, object adviseState)
         {
-            return Task.Factory.FromAsync(BeginStartAdvise(item, format, hot, acknowledge, null, null, adviseState), EndStartAdvise);
+            try
+            {
+                return Task.Factory.FromAsync(BeginStartAdvise(item, format, hot, acknowledge, null, null, adviseState), EndStartAdvise);
+            }
+            catch (DdemlException e)
+            {
+                throw new DdeException(e);
+            }
+            catch (ObjectDisposedException e)
+            {
+                throw new ObjectDisposedException(GetType().ToString(), e);
+            }
         }
 
         /// <summary>
@@ -1827,7 +1937,18 @@ namespace NDde.Client
         /// </exception>
         public virtual Task StopAdviseAsync(string item)
         {
-            return Task.Factory.FromAsync(BeginStopAdvise(item, null, null), EndStopAdvise);
+            try
+            {
+                return Task.Factory.FromAsync(BeginStopAdvise(item, null, null), EndStopAdvise);
+            }
+            catch (DdemlException e)
+            {
+                throw new DdeException(e);
+            }
+            catch (ObjectDisposedException e)
+            {
+                throw new ObjectDisposedException(GetType().ToString(), e);
+            }
         }
 
         /// <summary>
