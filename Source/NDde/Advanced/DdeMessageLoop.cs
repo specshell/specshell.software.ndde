@@ -38,6 +38,7 @@ using System.ComponentModel;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Windows.Forms;
+using Specshell.WinForm.HiddenForm;
 
 namespace NDde.Advanced
 {
@@ -47,6 +48,7 @@ namespace NDde.Advanced
     /// <threadsafety static="true" instance="false" />
     public sealed class DdeMessageLoop : IDisposable, ISynchronizeInvoke
     {
+        /// <threadsafety static="true" instance="false" />
         private readonly Form _Form = new HiddenForm();
 
         private int _ThreadId = GetCurrentThreadId();
@@ -135,40 +137,5 @@ namespace NDde.Advanced
             _Form.Show();
             Application.Run(form);
         }
-
-        /// <threadsafety static="true" instance="false" />
-        private sealed class HiddenForm : Form
-        {
-            public HiddenForm()
-            {
-                Load += HiddenForm_Load;
-            }
-
-            protected override CreateParams CreateParams
-            {
-                get
-                {
-                    const int WS_POPUP = unchecked((int) 0x80000000);
-                    const int WS_EX_TOOLWINDOW = 0x80;
-
-                    var cp = base.CreateParams;
-                    cp.ExStyle = WS_EX_TOOLWINDOW;
-                    cp.Style = WS_POPUP;
-                    cp.Height = 0;
-                    cp.Width = 0;
-                    return cp;
-                }
-            }
-
-            [DllImport("user32.dll")]
-            private static extern IntPtr SetParent(IntPtr hWndChild, IntPtr hwndNewParent);
-
-            private void HiddenForm_Load(object source, EventArgs e)
-            {
-                // Always create a hidden window
-                const int HWND_MESSAGE = -1;
-                SetParent(Handle, new IntPtr(HWND_MESSAGE));
-            }
-        } // class
     } // class
 } // namespace

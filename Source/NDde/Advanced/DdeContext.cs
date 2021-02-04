@@ -42,6 +42,7 @@ using System.Windows.Forms;
 using NDde.Internal;
 using NDde.Internal.Advanced;
 using NDde.Internal.Utility;
+using Specshell.WinForm.HiddenForm;
 
 namespace NDde.Advanced
 {
@@ -613,7 +614,7 @@ namespace NDde.Advanced
         /// <threadsafety static="true" instance="true" />
         private sealed class DdeThread : IDisposable, ISynchronizeInvoke
         {
-            private readonly Form _Form;
+            private readonly Form _Form = new HiddenForm();
 
             private readonly ManualResetEvent _Initialized = new(false);
 
@@ -624,7 +625,6 @@ namespace NDde.Advanced
 
             public DdeThread()
             {
-                _Form = new HiddenForm();
                 _Form.Load += Form_Load;
                 _Thread = new Thread(Run);
                 _Thread.SetApartmentState(ApartmentState.STA);
@@ -745,41 +745,6 @@ namespace NDde.Advanced
             private void Application_ThreadException(object sender, ThreadExceptionEventArgs e)
             {
                 // This is here to prevent unhandled exceptions from appearing in a message box.
-            }
-
-            /// <threadsafety static="true" instance="false" />
-            private sealed class HiddenForm : Form
-            {
-                public HiddenForm()
-                {
-                    Load += HiddenForm_Load;
-                }
-
-                protected override CreateParams CreateParams
-                {
-                    get
-                    {
-                        const int WS_POPUP = unchecked((int) 0x80000000);
-                        const int WS_EX_TOOLWINDOW = 0x80;
-
-                        var cp = base.CreateParams;
-                        cp.ExStyle = WS_EX_TOOLWINDOW;
-                        cp.Style = WS_POPUP;
-                        cp.Height = 0;
-                        cp.Width = 0;
-                        return cp;
-                    }
-                }
-
-                [DllImport("user32.dll")]
-                private static extern IntPtr SetParent(IntPtr hWndChild, IntPtr hwndNewParent);
-
-                private void HiddenForm_Load(object source, EventArgs e)
-                {
-                    // Always create a hidden window
-                    const int HWND_MESSAGE = -1;
-                    SetParent(Handle, new IntPtr(HWND_MESSAGE));
-                }
             } // class
         } // class
     } // class
