@@ -52,7 +52,7 @@ jobs:
           || endsWith(github.event.ref, '/main')
           || github.event.action == 'published'
         shell: pwsh
-        run: dotnet nuget push **/*.nupkg --source $Env:SOURCE --api-key $Env:TOKEN
+        run: dotnet nuget push **/*.nupkg --source $Env:SOURCE --api-key $Env:TOKEN --skip-duplicate
         env:
           SOURCE: 'https://api.nuget.org/v3/index.json'
           TOKEN: ${{ secrets.NUGET_API_KEY }}
