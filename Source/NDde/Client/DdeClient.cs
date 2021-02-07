@@ -750,11 +750,11 @@ namespace NDde.Client
         }
 
         ///<inheritdoc cref="IDdeClient"/>
-        public virtual Task ExecuteAsync(string command, CancellationToken cancellationToken = default)
+        public virtual async Task ExecuteAsync(string command, CancellationToken cancellationToken = default)
         {
             try
             {
-                return Task.Factory.FromAsync(BeginExecute(command, null, null), EndExecute).HandleCancellation(cancellationToken);
+                await Task.Factory.FromAsync(BeginExecute(command, null, null), EndExecute).HandleCancellation(cancellationToken);
             }
             catch (DdemlException e)
             {
@@ -992,26 +992,15 @@ namespace NDde.Client
         ///<inheritdoc cref="IDdeClient"/>
         public virtual Task PokeAsync(string item, string data, CancellationToken cancellationToken = default)
         {
-            try
-            {
-                return PokeAsync(item, Context.Encoding.GetBytes(data + "\0"), 1, cancellationToken);
-            }
-            catch (DdemlException e)
-            {
-                throw new DdeException(e);
-            }
-            catch (ObjectDisposedException e)
-            {
-                throw new ObjectDisposedException(GetType().ToString(), e);
-            }
+            return PokeAsync(item, Context.Encoding.GetBytes(data + "\0"), 1, cancellationToken);
         }
 
         ///<inheritdoc cref="IDdeClient"/>
-        public virtual Task PokeAsync(string item, byte[] data, int format, CancellationToken cancellationToken = default)
+        public virtual async Task PokeAsync(string item, byte[] data, int format, CancellationToken cancellationToken = default)
         {
             try
             {
-                return Task.Factory.FromAsync(BeginPoke(item, data, format, null, null), EndPoke).HandleCancellation(cancellationToken);
+                await Task.Factory.FromAsync(BeginPoke(item, data, format, null, null), EndPoke).HandleCancellation(cancellationToken);
             }
             catch (DdemlException e)
             {
@@ -1265,11 +1254,11 @@ namespace NDde.Client
         }
 
         ///<inheritdoc cref="IDdeClient"/>
-        public virtual Task<byte[]> RequestAsync(string item, int format, CancellationToken cancellationToken = default)
+        public virtual async Task<byte[]> RequestAsync(string item, int format, CancellationToken cancellationToken = default)
         {
             try
             {
-                return Task.Factory.FromAsync(BeginRequest(item, format, null, null), EndRequest).HandleCancellation(cancellationToken);
+                return await Task.Factory.FromAsync(BeginRequest(item, format, null, null), EndRequest).HandleCancellation(cancellationToken);
             }
             catch (DdemlException e)
             {
@@ -1483,26 +1472,15 @@ namespace NDde.Client
         ///<inheritdoc cref="IDdeClient"/>
         public virtual Task StartAdviseAsync(string item, int format, bool hot, CancellationToken cancellationToken = default)
         {
-            try
-            {
-                return StartAdviseAsync(item, format, hot, true, null, cancellationToken);
-            }
-            catch (DdemlException e)
-            {
-                throw new DdeException(e);
-            }
-            catch (ObjectDisposedException e)
-            {
-                throw new ObjectDisposedException(GetType().ToString(), e);
-            }
+            return StartAdviseAsync(item, format, hot, true, null, cancellationToken);
         }
 
         ///<inheritdoc cref="IDdeClient"/>
-        public virtual Task StartAdviseAsync(string item, int format, bool hot, bool acknowledge, object adviseState, CancellationToken cancellationToken = default)
+        public virtual async Task StartAdviseAsync(string item, int format, bool hot, bool acknowledge, object adviseState, CancellationToken cancellationToken = default)
         {
             try
             {
-                return Task.Factory.FromAsync(BeginStartAdvise(item, format, hot, acknowledge, null, null, adviseState), EndStartAdvise).HandleCancellation(cancellationToken);
+                await Task.Factory.FromAsync(BeginStartAdvise(item, format, hot, acknowledge, null, null, adviseState), EndStartAdvise).HandleCancellation(cancellationToken);
             }
             catch (DdemlException e)
             {
@@ -1705,11 +1683,11 @@ namespace NDde.Client
         }
 
         ///<inheritdoc cref="IDdeClient"/>
-        public virtual Task StopAdviseAsync(string item, CancellationToken cancellationToken = default)
+        public virtual async Task StopAdviseAsync(string item, CancellationToken cancellationToken = default)
         {
             try
             {
-                return Task.Factory.FromAsync(BeginStopAdvise(item, null, null), EndStopAdvise).HandleCancellation(cancellationToken);
+                await Task.Factory.FromAsync(BeginStopAdvise(item, null, null), EndStopAdvise).HandleCancellation(cancellationToken);
             }
             catch (DdemlException e)
             {
