@@ -181,8 +181,6 @@ namespace NDde.Internal.Client
         {
             var error = TryConnect();
 
-            //EventLogWriter.WriteEntry($"Ddemlclient Connect 184: {error}", EventLogEntryType.Information);
-
             switch (error)
             {
                 case -1:
@@ -194,7 +192,6 @@ namespace NDde.Internal.Client
                     var message = Resources.ConnectFailedMessage;
                     message = message.Replace("${service}", _Service);
                     message = message.Replace("${topic}", _Topic);
-                    //EventLogWriter.WriteEntry($"Ddemlclient DMLERR_NO_ERROR 189: {message} - {error}", EventLogEntryType.Information);
 
                     throw new DdemlException(message, error);
                 }

@@ -710,8 +710,6 @@ namespace NDde.Advanced
                 }
                 catch (InvalidOperationException e)
                 {
-                    //EventLogWriter.WriteEntry($"BeginInvoke 724 :Method: {method} Args[0]: {args[0]} - {e.Message} : {e.StackTrace}",
-                    //EventLogEntryType.Error);
                     if (!_Form.IsHandleCreated)
                         throw new ObjectDisposedException(GetType().ToString(), e);
                     throw;

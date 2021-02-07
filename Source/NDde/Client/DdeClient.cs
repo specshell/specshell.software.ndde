@@ -410,8 +410,6 @@ namespace NDde.Client
             }
             catch (DdemlException e)
             {
-                //EventLogWriter.WriteEntry($"Connect:{e.Message} - {e.StackTrace}",
-                //EventLogEntryType.Error);
                 throw new DdeException(e);
             }
             catch (ObjectDisposedException e)
@@ -459,9 +457,6 @@ namespace NDde.Client
             }
             catch (DdemlException e)
             {
-                //EventLogWriter.WriteEntry($"TryConnect:{e.Message} - {e.StackTrace}",
-                //EventLogEntryType.Error);
-
                 throw new DdeException(e);
             }
             catch (ObjectDisposedException e)
@@ -493,9 +488,6 @@ namespace NDde.Client
             }
             catch (DdemlException e)
             {
-                //EventLogWriter.WriteEntry($"Disconnect:{e.Message} - {e.StackTrace}",
-                //EventLogEntryType.Error);
-
                 throw new DdeException(e);
             }
             catch (ObjectDisposedException e)
