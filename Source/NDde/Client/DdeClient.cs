@@ -421,11 +421,11 @@ namespace NDde.Client
         }
 
         ///<inheritdoc cref="IDdeClient"/>
-        public virtual Task ConnectAsync(CancellationToken cancellationToken = default)
+        public virtual async Task ConnectAsync(CancellationToken cancellationToken = default)
         {
             try
             {
-                return Task.Factory.StartNew(Connect, cancellationToken);
+                await Task.Factory.StartNew(Connect, cancellationToken);
             }
             catch (DdemlException e)
             {
@@ -505,11 +505,11 @@ namespace NDde.Client
         }
 
         ///<inheritdoc cref="IDdeClient"/>
-        public virtual Task DisconnectAsync(CancellationToken cancellationToken = default)
+        public virtual async Task DisconnectAsync(CancellationToken cancellationToken = default)
         {
             try
             {
-                return Task.Factory.StartNew(Disconnect, cancellationToken);
+                await Task.Factory.StartNew(Disconnect, cancellationToken);
             }
             catch (DdemlException e)
             {
@@ -557,11 +557,11 @@ namespace NDde.Client
         }
 
         ///<inheritdoc cref="IDdeClient"/>
-        public virtual Task PauseAsync(CancellationToken cancellationToken = default)
+        public virtual async Task PauseAsync(CancellationToken cancellationToken = default)
         {
             try
             {
-                return Task.Factory.StartNew(Pause, cancellationToken);
+                await Task.Factory.StartNew(Pause, cancellationToken);
             }
             catch (DdemlException e)
             {
@@ -604,11 +604,11 @@ namespace NDde.Client
         }
 
         ///<inheritdoc cref="IDdeClient"/>
-        public virtual Task ResumeAsync(CancellationToken cancellationToken = default)
+        public virtual async Task ResumeAsync(CancellationToken cancellationToken = default)
         {
             try
             {
-                return Task.Factory.StartNew(Resume, cancellationToken);
+                await Task.Factory.StartNew(Resume, cancellationToken);
             }
             catch (DdemlException e)
             {
