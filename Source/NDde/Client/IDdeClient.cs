@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Threading;
 using System.Threading.Tasks;
 using NDde.Advanced;
 
@@ -81,13 +82,14 @@ namespace NDde.Client
         /// <summary>
         ///     This establishes a conversation with a server that supports the specified service name and topic name pair.
         /// </summary>
+        /// <param name="cancellationToken">For cancellening the operation</param>
         /// <exception cref="InvalidOperationException">
         ///     This is thrown when the client is already connected.
         /// </exception>
         /// <exception cref="DdeException">
         ///     This is thrown when the client could not connect to the server.
         /// </exception>
-        Task ConnectAsync();
+        Task ConnectAsync(CancellationToken cancellationToken = default);
 
         /// <summary>
         ///     This establishes a conversation with a server that supports the specified service name and topic name pair.
@@ -112,6 +114,7 @@ namespace NDde.Client
         /// <summary>
         ///     This terminates the current conversation.
         /// </summary>
+        /// <param name="cancellationToken">For cancellening the operation</param>
         /// <event cref="DdeClient.Disconnected" />
         /// <exception cref="InvalidOperationException">
         ///     This is thrown when the client was not previously connected.
@@ -119,7 +122,7 @@ namespace NDde.Client
         /// <exception cref="DdeException">
         ///     This is thown when the client could not disconnect from the server.
         /// </exception>
-        Task DisconnectAsync();
+        Task DisconnectAsync(CancellationToken cancellationToken = default);
 
         /// <summary>
         ///     This pauses the current conversation.
@@ -140,6 +143,7 @@ namespace NDde.Client
         /// <summary>
         ///     This pauses the current conversation.
         /// </summary>
+        /// <param name="cancellationToken">For cancellening the operation</param>
         /// <exception cref="InvalidOperationException">
         ///     This is thrown when the conversation is already paused.
         /// </exception>
@@ -151,7 +155,7 @@ namespace NDde.Client
         ///     complete until the
         ///     conversation has resumed.
         /// </remarks>
-        Task PauseAsync();
+        Task PauseAsync(CancellationToken cancellationToken = default);
 
         /// <summary>
         ///     This resumes the current conversation.
@@ -167,13 +171,14 @@ namespace NDde.Client
         /// <summary>
         ///     This resumes the current conversation.
         /// </summary>
+        /// <param name="cancellationToken">For cancellening the operation</param>
         /// <exception cref="InvalidOperationException">
         ///     This is thrown when the conversation was not previously paused or when the client is not connected.
         /// </exception>
         /// <exception cref="DdeException">
         ///     This is thrown when the conversation could not be resumed.
         /// </exception>
-        Task ResumeAsync();
+        Task ResumeAsync(CancellationToken cancellationToken = default);
 
         /// <summary>
         ///     This terminates an asychronous operation.
@@ -247,6 +252,7 @@ namespace NDde.Client
         /// <param name="command">
         ///     The command to be sent to the server application.
         /// </param>
+        /// <param name="cancellationToken">For cancellening the operation</param>
         /// <returns>
         ///     An <c>Task</c> object for this operation.
         /// </returns>
@@ -262,7 +268,7 @@ namespace NDde.Client
         /// <exception cref="DdeException">
         ///     This is thrown when the asynchronous operation could not begin.
         /// </exception>
-        Task ExecuteAsync(string command);
+        Task ExecuteAsync(string command, CancellationToken cancellationToken = default);
 
         /// <summary>
         ///     This begins an asynchronous operation to send a command to the server application.
@@ -407,6 +413,7 @@ namespace NDde.Client
         /// <param name="data">
         ///     The data to send.
         /// </param>
+        /// <param name="cancellationToken">For cancellening the operation</param>
         /// <returns>
         ///     An <c>Task</c> object for this operation.
         /// </returns>
@@ -422,7 +429,7 @@ namespace NDde.Client
         /// <exception cref="DdeException">
         ///     This is thrown when the asynchronous operation could not begin.
         /// </exception>
-        Task PokeAsync(string item, string data);
+        Task PokeAsync(string item, string data, CancellationToken cancellationToken = default);
 
         /// <summary>
         ///     This begins an asynchronous operation to send data to the server application.
@@ -436,6 +443,7 @@ namespace NDde.Client
         /// <param name="format">
         ///     The format of the data.
         /// </param>
+        /// <param name="cancellationToken">For cancellening the operation</param>
         /// <returns>
         ///     An <c>IAsyncResult</c> object for this operation.
         /// </returns>
@@ -451,7 +459,7 @@ namespace NDde.Client
         /// <exception cref="DdeException">
         ///     This is thrown when the asynchronous operation could not begin.
         /// </exception>
-        Task PokeAsync(string item, byte[] data, int format);
+        Task PokeAsync(string item, byte[] data, int format, CancellationToken cancellationToken = default);
 
         /// <summary>
         ///     This begins an asynchronous operation to send data to the server application.
@@ -600,6 +608,7 @@ namespace NDde.Client
         /// <param name="item">
         ///     An item name supported by the current conversation.
         /// </param>
+        /// <param name="cancellationToken">For cancellening the operation</param>
         /// <returns>
         ///     An <c>Task</c> object for this operation.
         /// </returns>
@@ -615,7 +624,7 @@ namespace NDde.Client
         /// <exception cref="DdeException">
         ///     This is thrown when the asynchronous operation could not begin.
         /// </exception>
-        Task<string> RequestAsync(string item);
+        Task<string> RequestAsync(string item, CancellationToken cancellationToken = default);
 
         /// <summary>
         ///     This begins an asynchronous operation to request data using the specified item name.
@@ -626,6 +635,7 @@ namespace NDde.Client
         /// <param name="format">
         ///     The format of the data to return.
         /// </param>
+        /// <param name="cancellationToken">For cancellening the operation</param>
         /// <returns>
         ///     An <c>IAsyncResult</c> object for this operation.
         /// </returns>
@@ -641,7 +651,7 @@ namespace NDde.Client
         /// <exception cref="DdeException">
         ///     This is thrown when the asynchronous operation could not begin.
         /// </exception>
-        Task<byte[]> RequestAsync(string item, int format);
+        Task<byte[]> RequestAsync(string item, int format, CancellationToken cancellationToken = default);
 
         /// <summary>
         ///     This begins an asynchronous operation to request data using the specified item name.
@@ -784,6 +794,7 @@ namespace NDde.Client
         /// <param name="hot">
         ///     A bool indicating whether data should be included with the notification.
         /// </param>
+        /// <param name="cancellationToken">For cancellening the operation</param>
         /// <returns>
         ///     An <c>Task</c> object for this operation.
         /// </returns>
@@ -800,7 +811,7 @@ namespace NDde.Client
         /// <exception cref="DdeException">
         ///     This is thrown when the asynchronous operation could not begin.
         /// </exception>
-        Task StartAdviseAsync(string item, int format, bool hot);
+        Task StartAdviseAsync(string item, int format, bool hot, CancellationToken cancellationToken = default);
 
         /// <summary>
         ///     This begins an asynchronous operation to initiate an advise loop on the specified item name.
@@ -820,6 +831,7 @@ namespace NDde.Client
         /// <param name="adviseState">
         ///     An application defined data object to associate with this advise loop.
         /// </param>
+        /// <param name="cancellationToken">For cancellening the operation</param>
         /// <returns>
         ///     An <c>Task</c> object for this operation.
         /// </returns>
@@ -836,7 +848,7 @@ namespace NDde.Client
         /// <exception cref="DdeException">
         ///     This is thrown when the asynchronous operation could not begin.
         /// </exception>
-        Task StartAdviseAsync(string item, int format, bool hot, bool acknowledge, object adviseState);
+        Task StartAdviseAsync(string item, int format, bool hot, bool acknowledge, object adviseState, CancellationToken cancellationToken = default);
 
         /// <summary>
         ///     This begins an asynchronous operation to initiate an advise loop on the specified item name.
@@ -967,6 +979,7 @@ namespace NDde.Client
         /// <param name="item">
         ///     An item name that has an active advise loop.
         /// </param>
+        /// <param name="cancellationToken">For cancellening the operation</param>
         /// <returns>
         ///     An <c>Task</c> object for this operation.
         /// </returns>
@@ -982,7 +995,7 @@ namespace NDde.Client
         /// <exception cref="DdeException">
         ///     This is thrown when the asynchronous operation could not begin.
         /// </exception>
-        Task StopAdviseAsync(string item);
+        Task StopAdviseAsync(string item, CancellationToken cancellationToken = default);
 
         /// <summary>
         ///     This begins an asynchronous operation to terminate the advise loop for the specified item name.
