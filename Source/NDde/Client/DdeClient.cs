@@ -1192,6 +1192,12 @@ namespace NDde.Client
             }
         }
 
+        ///<inheritdoc cref="IDdeClient"/>
+        public virtual char[] RequestChars(string item, int timeout)
+        {
+            return Context.Encoding.GetChars(Request(item, 1, timeout));
+        }
+
         /// <summary>
         ///     This requests data using the specified item name.
         /// </summary>
@@ -1260,6 +1266,12 @@ namespace NDde.Client
             {
                 throw new ObjectDisposedException(GetType().ToString(), e);
             }
+        }
+
+        ///<inheritdoc cref="IDdeClient"/>
+        public virtual async Task<char[]> RequestCharsAsync(string item, CancellationToken cancellationToken = default)
+        {
+            return Context.Encoding.GetChars(await RequestAsync(item, 1, cancellationToken));
         }
 
         /// <summary>

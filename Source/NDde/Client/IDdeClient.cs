@@ -579,6 +579,39 @@ namespace NDde.Client
         /// </remarks>
         byte[] Request(string item, int format, int timeout);
 
+        /// <overloads>
+        ///     <summary>
+        ///     </summary>
+        /// </overloads>
+        /// <summary>
+        ///     This requests data using the specified item name.
+        /// </summary>
+        /// <param name="item">
+        ///     An item name supported by the current conversation.
+        /// </param>
+        /// <param name="timeout">
+        ///     The amount of time in milliseconds to wait for a response.
+        /// </param>
+        /// <returns>
+        ///     The data returned by the server application in CF_TEXT format.
+        /// </returns>
+        /// <exception cref="ArgumentException">
+        ///     This is thown when item exceeds 255 characters or timeout is negative.
+        /// </exception>
+        /// <exception cref="ArgumentNullException">
+        ///     This is thrown when item is a null reference.
+        /// </exception>
+        /// <exception cref="InvalidOperationException">
+        ///     This is thrown when the client is not connected.
+        /// </exception>
+        /// <exception cref="DdeException">
+        ///     This is thrown when the server does not process the request.
+        /// </exception>
+        /// <remarks>
+        ///     This operation will timeout if the conversation is paused.
+        /// </remarks>
+        char[] RequestChars(string item, int timeout);
+
         /// <summary>
         ///     This requests data using the specified item name.
         /// </summary>
@@ -652,6 +685,30 @@ namespace NDde.Client
         ///     This is thrown when the asynchronous operation could not begin.
         /// </exception>
         Task<byte[]> RequestAsync(string item, int format, CancellationToken cancellationToken = default);
+
+        /// <summary>
+        ///     This begins an asynchronous operation to request data using the specified item name.
+        /// </summary>
+        /// <param name="item">
+        ///     An item name supported by the current conversation.
+        /// </param>
+        /// <param name="cancellationToken">For cancellening the operation</param>
+        /// <returns>
+        ///     An <c>Task</c> object for this operation.
+        /// </returns>
+        /// <exception cref="ArgumentException">
+        ///     This is thown when item exceeds 255 characters.
+        /// </exception>
+        /// <exception cref="ArgumentNullException">
+        ///     This is thrown when item is a null reference.
+        /// </exception>
+        /// <exception cref="InvalidOperationException">
+        ///     This is thrown when the client is not connected.
+        /// </exception>
+        /// <exception cref="DdeException">
+        ///     This is thrown when the asynchronous operation could not begin.
+        /// </exception>
+        Task<char[]> RequestCharsAsync(string item, CancellationToken cancellationToken = default);
 
         /// <summary>
         ///     This begins an asynchronous operation to request data using the specified item name.
