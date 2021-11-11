@@ -16,7 +16,7 @@
   </PropertyGroup>
 
   <ItemGroup Condition=" '$(IsPackable)' == 'true'">
-    <PackageReference Include="Microsoft.SourceLink.GitHub" Version="1.0.0" PrivateAssets="All" />
+    <PackageReference Include="Microsoft.SourceLink.GitHub" Version="1.1.1" PrivateAssets="All" />
   </ItemGroup>
 
   <!-- Workaround for https://github.com/GitTools/GitVersion/issues/1031 -->
