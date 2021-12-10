@@ -33,113 +33,174 @@
 
 #endregion
 
-using System;
 using System.Collections;
-using System.Collections.Generic;
-using System.Linq;
 
-namespace NDde.Internal.Utility
+namespace NDde.Internal.Utility;
+
+internal sealed class WeakReferenceDictionary<TKey, TValue> : IDictionary<TKey, TValue> where TValue : class
 {
-    internal sealed class WeakReferenceDictionary<TKey, TValue> : IDictionary<TKey, TValue> where TValue : class
+    private readonly IDictionary<TKey, WeakReference> _Storage = new Dictionary<TKey, WeakReference>();
+
+    public void Add(TKey key, TValue value)
     {
-        private readonly IDictionary<TKey, WeakReference> _Storage = new Dictionary<TKey, WeakReference>();
+        Purge();
+        _Storage.Add(key, new WeakReference(value));
+    }
 
-        public void Add(TKey key, TValue value)
+    public bool ContainsKey(TKey key)
+    {
+        return _Storage.ContainsKey(key);
+    }
+
+    public ICollection<TKey> Keys => _Storage.Keys;
+
+    public bool Remove(TKey key)
+    {
+        return _Storage.Remove(key);
+    }
+
+    public bool TryGetValue(TKey key, out TValue value)
+    {
+        value = null;
+        if (!_Storage.ContainsKey(key)) return false;
+        value = _Storage[key].Target as TValue;
+        return value != null;
+    }
+
+    public ICollection<TValue> Values => new MyValueCollection(this);
+
+    public TValue this[TKey key]
+    {
+        get
         {
-            Purge();
-            _Storage.Add(key, new WeakReference(value));
+            if (!_Storage.ContainsKey(key)) return null;
+            if (_Storage[key].Target is TValue value)
+                return value;
+
+            return null;
         }
-
-        public bool ContainsKey(TKey key)
+        set
         {
-            return _Storage.ContainsKey(key);
-        }
-
-        public ICollection<TKey> Keys => _Storage.Keys;
-
-        public bool Remove(TKey key)
-        {
-            return _Storage.Remove(key);
-        }
-
-        public bool TryGetValue(TKey key, out TValue value)
-        {
-            value = null;
-            if (!_Storage.ContainsKey(key)) return false;
-            value = _Storage[key].Target as TValue;
-            return value != null;
-        }
-
-        public ICollection<TValue> Values => new MyValueCollection(this);
-
-        public TValue this[TKey key]
-        {
-            get
+            if (value != null)
             {
-                if (!_Storage.ContainsKey(key)) return null;
-                if (_Storage[key].Target is TValue value)
-                    return value;
-
-                return null;
+                Purge();
+                _Storage[key] = new WeakReference(value);
             }
-            set
+            else
             {
-                if (value != null)
-                {
-                    Purge();
-                    _Storage[key] = new WeakReference(value);
-                }
-                else
-                {
-                    _Storage.Remove(key);
-                }
+                _Storage.Remove(key);
             }
         }
+    }
 
-        public void Add(KeyValuePair<TKey, TValue> item)
+    public void Add(KeyValuePair<TKey, TValue> item)
+    {
+        Purge();
+        var (key, value) = item;
+        _Storage.Add(key, new WeakReference(value));
+    }
+
+    public void Clear()
+    {
+        _Storage.Clear();
+    }
+
+    public bool Contains(KeyValuePair<TKey, TValue> item)
+    {
+        var (key, _) = item;
+        if (!_Storage.ContainsKey(key)) return false;
+        return _Storage[key].Target is TValue;
+    }
+
+    public void CopyTo(KeyValuePair<TKey, TValue>[] array, int arrayIndex)
+    {
+        var index = 0;
+        foreach (var kvp in this)
         {
-            Purge();
-            var (key, value) = item;
-            _Storage.Add(key, new WeakReference(value));
+            array[arrayIndex + index] = kvp;
+            index++;
+        }
+    }
+
+    public int Count => _Storage.Count;
+
+    public bool IsReadOnly => _Storage.IsReadOnly;
+
+    public bool Remove(KeyValuePair<TKey, TValue> item)
+    {
+        return false;
+    }
+
+    public IEnumerator<KeyValuePair<TKey, TValue>> GetEnumerator()
+    {
+        foreach (var (key, weakReference) in _Storage)
+        {
+            if (weakReference.Target is TValue value)
+                yield return new KeyValuePair<TKey, TValue>(key, value);
+        }
+    }
+
+    IEnumerator IEnumerable.GetEnumerator()
+    {
+        return GetEnumerator();
+    }
+
+    private void Purge()
+    {
+        var dead = (from kvp in _Storage where !kvp.Value.IsAlive select kvp.Key).ToList();
+        foreach (var key in dead)
+            _Storage.Remove(key);
+    }
+
+    private sealed class MyValueCollection : ICollection<TValue>
+    {
+        private readonly WeakReferenceDictionary<TKey, TValue> _Parent;
+
+        public MyValueCollection(WeakReferenceDictionary<TKey, TValue> parent)
+        {
+            _Parent = parent;
+        }
+
+        public void Add(TValue item)
+        {
+            throw new Exception("The method or operation is not implemented.");
         }
 
         public void Clear()
         {
-            _Storage.Clear();
+            throw new Exception("The method or operation is not implemented.");
         }
 
-        public bool Contains(KeyValuePair<TKey, TValue> item)
+        public bool Contains(TValue item)
         {
-            var (key, _) = item;
-            if (!_Storage.ContainsKey(key)) return false;
-            return _Storage[key].Target is TValue;
+            return this.Any(value => value == item);
         }
 
-        public void CopyTo(KeyValuePair<TKey, TValue>[] array, int arrayIndex)
+        public void CopyTo(TValue[] array, int arrayIndex)
         {
             var index = 0;
-            foreach (var kvp in this)
+            foreach (var value in this)
             {
-                array[arrayIndex + index] = kvp;
+                array[arrayIndex + index] = value;
                 index++;
             }
         }
 
-        public int Count => _Storage.Count;
+        public int Count => _Parent._Storage.Values.Count;
 
-        public bool IsReadOnly => _Storage.IsReadOnly;
+        public bool IsReadOnly => true;
 
-        public bool Remove(KeyValuePair<TKey, TValue> item)
+        public bool Remove(TValue item)
         {
-            return false;
+            throw new Exception("The method or operation is not implemented.");
         }
 
-        public IEnumerator<KeyValuePair<TKey, TValue>> GetEnumerator()
+        public IEnumerator<TValue> GetEnumerator()
         {
-            foreach (var (key, weakReference) in _Storage)
+            foreach (var wr in _Parent._Storage.Values)
             {
-                if (weakReference.Target is TValue value)
-                    yield return new KeyValuePair<TKey, TValue>(key, value);
+                if (wr.Target is TValue value)
+                    yield return value;
             }
         }
 
@@ -147,70 +208,6 @@ namespace NDde.Internal.Utility
         {
             return GetEnumerator();
         }
-
-        private void Purge()
-        {
-            var dead = (from kvp in _Storage where !kvp.Value.IsAlive select kvp.Key).ToList();
-            foreach (var key in dead)
-                _Storage.Remove(key);
-        }
-
-        private sealed class MyValueCollection : ICollection<TValue>
-        {
-            private readonly WeakReferenceDictionary<TKey, TValue> _Parent;
-
-            public MyValueCollection(WeakReferenceDictionary<TKey, TValue> parent)
-            {
-                _Parent = parent;
-            }
-
-            public void Add(TValue item)
-            {
-                throw new Exception("The method or operation is not implemented.");
-            }
-
-            public void Clear()
-            {
-                throw new Exception("The method or operation is not implemented.");
-            }
-
-            public bool Contains(TValue item)
-            {
-                return this.Any(value => value == item);
-            }
-
-            public void CopyTo(TValue[] array, int arrayIndex)
-            {
-                var index = 0;
-                foreach (var value in this)
-                {
-                    array[arrayIndex + index] = value;
-                    index++;
-                }
-            }
-
-            public int Count => _Parent._Storage.Values.Count;
-
-            public bool IsReadOnly => true;
-
-            public bool Remove(TValue item)
-            {
-                throw new Exception("The method or operation is not implemented.");
-            }
-
-            public IEnumerator<TValue> GetEnumerator()
-            {
-                foreach (var wr in _Parent._Storage.Values)
-                {
-                    if (wr.Target is TValue value)
-                        yield return value;
-                }
-            }
-
-            IEnumerator IEnumerable.GetEnumerator()
-            {
-                return GetEnumerator();
-            }
-        } // class
     } // class
-} // namespace
+} // class
+// namespace

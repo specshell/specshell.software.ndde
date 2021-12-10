@@ -33,101 +33,100 @@
 
 #endregion
 
-using System;
 using NDde.Internal.Advanced;
 
-namespace NDde.Advanced
+namespace NDde.Advanced;
+
+/// <summary>
+///     This contains the parameters of the DDEML callback function.
+/// </summary>
+/// <threadsafety static="true" instance="false" />
+/// <remarks>
+///     <para>
+///         The <c>dwRet</c> property contains the value returned by the DDEML callback function and is the only member
+///         that can be modified.  See the
+///         MSDN documentation for more information about the members of this class.
+///     </para>
+///     <para>
+///         <note type="caution">
+///             Incorrect usage of the DDEML can cause this library to function incorrectly and can lead to resource leaks.
+///         </note>
+///     </para>
+/// </remarks>
+public sealed class DdeTransaction
 {
-    /// <summary>
-    ///     This contains the parameters of the DDEML callback function.
-    /// </summary>
-    /// <threadsafety static="true" instance="false" />
-    /// <remarks>
-    ///     <para>
-    ///         The <c>dwRet</c> property contains the value returned by the DDEML callback function and is the only member
-    ///         that can be modified.  See the
-    ///         MSDN documentation for more information about the members of this class.
-    ///     </para>
-    ///     <para>
-    ///         <note type="caution">
-    ///             Incorrect usage of the DDEML can cause this library to function incorrectly and can lead to resource leaks.
-    ///         </note>
-    ///     </para>
-    /// </remarks>
-    public sealed class DdeTransaction
+    private readonly DdemlTransaction _DdemlObject;
+
+    internal DdeTransaction(DdemlTransaction transaction)
     {
-        private readonly DdemlTransaction _DdemlObject;
+        _DdemlObject = transaction;
+    }
 
-        internal DdeTransaction(DdemlTransaction transaction)
-        {
-            _DdemlObject = transaction;
-        }
+    /// <summary>
+    ///     See the MSDN documentation for information about this member.
+    /// </summary>
+    public int uType => _DdemlObject.uType;
 
-        /// <summary>
-        ///     See the MSDN documentation for information about this member.
-        /// </summary>
-        public int uType => _DdemlObject.uType;
+    /// <summary>
+    ///     See the MSDN documentation for information about this member.
+    /// </summary>
+    public int uFmt => _DdemlObject.uFmt;
 
-        /// <summary>
-        ///     See the MSDN documentation for information about this member.
-        /// </summary>
-        public int uFmt => _DdemlObject.uFmt;
+    /// <summary>
+    ///     See the MSDN documentation for information about this member.
+    /// </summary>
+    public IntPtr hConv => _DdemlObject.hConv;
 
-        /// <summary>
-        ///     See the MSDN documentation for information about this member.
-        /// </summary>
-        public IntPtr hConv => _DdemlObject.hConv;
+    /// <summary>
+    ///     See the MSDN documentation for information about this member.
+    /// </summary>
+    public IntPtr hsz1 => _DdemlObject.hsz1;
 
-        /// <summary>
-        ///     See the MSDN documentation for information about this member.
-        /// </summary>
-        public IntPtr hsz1 => _DdemlObject.hsz1;
+    /// <summary>
+    ///     See the MSDN documentation for information about this member.
+    /// </summary>
+    public IntPtr hsz2 => _DdemlObject.hsz2;
 
-        /// <summary>
-        ///     See the MSDN documentation for information about this member.
-        /// </summary>
-        public IntPtr hsz2 => _DdemlObject.hsz2;
+    /// <summary>
+    ///     See the MSDN documentation for information about this member.
+    /// </summary>
+    public IntPtr hData => _DdemlObject.hData;
 
-        /// <summary>
-        ///     See the MSDN documentation for information about this member.
-        /// </summary>
-        public IntPtr hData => _DdemlObject.hData;
+    /// <summary>
+    ///     See the MSDN documentation for information about this member.
+    /// </summary>
+    public IntPtr dwData1 => _DdemlObject.dwData1;
 
-        /// <summary>
-        ///     See the MSDN documentation for information about this member.
-        /// </summary>
-        public IntPtr dwData1 => _DdemlObject.dwData1;
+    /// <summary>
+    ///     See the MSDN documentation for information about this member.
+    /// </summary>
+    public IntPtr dwData2 => _DdemlObject.dwData2;
 
-        /// <summary>
-        ///     See the MSDN documentation for information about this member.
-        /// </summary>
-        public IntPtr dwData2 => _DdemlObject.dwData2;
+    /// <summary>
+    ///     This gets the return value of the DDEML callback function.  See the MSDN documentation for information about this
+    ///     member.
+    /// </summary>
+    /// <remarks>
+    ///     This will be ignored if the PreFilterTransaction method returns false.
+    /// </remarks>
+    public IntPtr dwRet
+    {
+        get => _DdemlObject.dwRet;
+        set => _DdemlObject.dwRet = value;
+    }
 
-        /// <summary>
-        ///     This gets the return value of the DDEML callback function.  See the MSDN documentation for information about this
-        ///     member.
-        /// </summary>
-        /// <remarks>
-        ///     This will be ignored if the PreFilterTransaction method returns false.
-        /// </remarks>
-        public IntPtr dwRet
-        {
-            get => _DdemlObject.dwRet;
-            set => _DdemlObject.dwRet = value;
-        }
-
-        /// <summary>
-        /// </summary>
-        /// <returns></returns>
-        public override string ToString()
-        {
-            var s = "";
-            foreach (var property in GetType().GetProperties())
-                if (s.Length == 0)
-                    s += property.Name + "=" + property.GetValue(this, null);
-                else
-                    s += " " + property.Name + "=" + property.GetValue(this, null);
-            return s;
-        }
-    } // class
-} // namespace
+    /// <summary>
+    /// </summary>
+    /// <returns></returns>
+    public override string ToString()
+    {
+        var s = "";
+        foreach (var property in GetType().GetProperties())
+            if (s.Length == 0)
+                s += property.Name + "=" + property.GetValue(this, null);
+            else
+                s += " " + property.Name + "=" + property.GetValue(this, null);
+        return s;
+    }
+} // class
+// namespace

@@ -33,35 +33,33 @@
 
 #endregion
 
-using System;
+namespace NDde.Internal.Advanced.Monitor;
 
-namespace NDde.Internal.Advanced.Monitor
+internal sealed class DdemlConversationActivityEventArgs : DdemlActivityEventArgs
 {
-    internal sealed class DdemlConversationActivityEventArgs : DdemlActivityEventArgs
+    public DdemlConversationActivityEventArgs(
+        string service,
+        string topic,
+        bool established,
+        IntPtr clientHandle,
+        IntPtr serverHandle,
+        IntPtr taskHandle) : base(taskHandle)
     {
-        public DdemlConversationActivityEventArgs(
-            string service,
-            string topic,
-            bool established,
-            IntPtr clientHandle,
-            IntPtr serverHandle,
-            IntPtr taskHandle) : base(taskHandle)
-        {
-            Service = service;
-            Topic = topic;
-            IsEstablished = established;
-            ClientHandle = clientHandle;
-            ServerHandle = serverHandle;
-        }
+        Service = service;
+        Topic = topic;
+        IsEstablished = established;
+        ClientHandle = clientHandle;
+        ServerHandle = serverHandle;
+    }
 
-        public string Service { get; } = "";
+    public string Service { get; } = "";
 
-        public string Topic { get; } = "";
+    public string Topic { get; } = "";
 
-        public bool IsEstablished { get; }
+    public bool IsEstablished { get; }
 
-        public IntPtr ClientHandle { get; } = IntPtr.Zero;
+    public IntPtr ClientHandle { get; } = IntPtr.Zero;
 
-        public IntPtr ServerHandle { get; } = IntPtr.Zero;
-    } // class
-} // namespace
+    public IntPtr ServerHandle { get; } = IntPtr.Zero;
+} // class
+// namespace

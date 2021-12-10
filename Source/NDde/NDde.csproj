@@ -1,6 +1,6 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>net5.0-windows</TargetFramework>
+    <TargetFramework>net6.0-windows</TargetFramework>
     <UseWindowsForms>true</UseWindowsForms>
     <AssemblyTitle>NDde</AssemblyTitle>
     <Authors>Brian Gideon</Authors>
@@ -12,6 +12,8 @@
     <PackageId>Specshell.NDde</PackageId>
     <PackageLicenseFile>LICENSE</PackageLicenseFile>
     <Nullable>disable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
   </PropertyGroup>
 
   <ItemGroup>

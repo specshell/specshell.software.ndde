@@ -33,109 +33,106 @@
 
 #endregion
 
-using System;
 using System.ComponentModel;
 using System.Runtime.InteropServices;
-using System.Threading;
-using System.Windows.Forms;
 using Specshell.WinForm.HiddenForm;
 
-namespace NDde.Advanced
+namespace NDde.Advanced;
+
+/// <summary>
+///     This is a synchronizing object that can run a message loop on any thread.
+/// </summary>
+/// <threadsafety static="true" instance="false" />
+public sealed class DdeMessageLoop : IDisposable, ISynchronizeInvoke
 {
-    /// <summary>
-    ///     This is a synchronizing object that can run a message loop on any thread.
-    /// </summary>
     /// <threadsafety static="true" instance="false" />
-    public sealed class DdeMessageLoop : IDisposable, ISynchronizeInvoke
+    private readonly Form _Form = new HiddenForm();
+
+    private int _ThreadId = GetCurrentThreadId();
+
+    /// <summary>
+    ///     This releases all resources held by this instance.
+    /// </summary>
+    public void Dispose()
     {
-        /// <threadsafety static="true" instance="false" />
-        private readonly Form _Form = new HiddenForm();
+        _Form.Dispose();
+    }
 
-        private int _ThreadId = GetCurrentThreadId();
+    /// <summary>
+    ///     This begins an asynchronous operation to execute a delegate on the thread hosting this object.
+    /// </summary>
+    /// <param name="method">
+    ///     The delegate to execute.
+    /// </param>
+    /// <param name="args">
+    ///     The arguments to pass to the delegate.
+    /// </param>
+    /// <returns>
+    ///     An <c>IAsyncResult</c> object for this operation.
+    /// </returns>
+    IAsyncResult ISynchronizeInvoke.BeginInvoke(Delegate method, object[] args)
+    {
+        return _Form.BeginInvoke(method, args);
+    }
 
-        /// <summary>
-        ///     This releases all resources held by this instance.
-        /// </summary>
-        public void Dispose()
-        {
-            _Form.Dispose();
-        }
+    /// <summary>
+    ///     This returns the object that the delegate returned in the operation.
+    /// </summary>
+    /// <param name="asyncResult">
+    ///     The <c>IAsyncResult</c> object returned by a call to <c>BeginInvoke</c>.
+    /// </param>
+    /// <returns>
+    ///     The object returned by the delegate.
+    /// </returns>
+    object ISynchronizeInvoke.EndInvoke(IAsyncResult asyncResult)
+    {
+        return _Form.EndInvoke(asyncResult);
+    }
 
-        /// <summary>
-        ///     This begins an asynchronous operation to execute a delegate on the thread hosting this object.
-        /// </summary>
-        /// <param name="method">
-        ///     The delegate to execute.
-        /// </param>
-        /// <param name="args">
-        ///     The arguments to pass to the delegate.
-        /// </param>
-        /// <returns>
-        ///     An <c>IAsyncResult</c> object for this operation.
-        /// </returns>
-        IAsyncResult ISynchronizeInvoke.BeginInvoke(Delegate method, object[] args)
-        {
-            return _Form.BeginInvoke(method, args);
-        }
+    /// <summary>
+    ///     This executes a delegate on the thread hosting this object.
+    /// </summary>
+    /// <param name="method">
+    ///     The delegate to execute.
+    /// </param>
+    /// <param name="args">
+    ///     The arguments to pass to the delegate.
+    /// </param>
+    /// <returns>
+    ///     The object returned by the delegate.
+    /// </returns>
+    object ISynchronizeInvoke.Invoke(Delegate method, object[] args)
+    {
+        return Thread.VolatileRead(ref _ThreadId) != GetCurrentThreadId() ? _Form.Invoke(method, args) : method.DynamicInvoke(args);
+    }
 
-        /// <summary>
-        ///     This returns the object that the delegate returned in the operation.
-        /// </summary>
-        /// <param name="asyncResult">
-        ///     The <c>IAsyncResult</c> object returned by a call to <c>BeginInvoke</c>.
-        /// </param>
-        /// <returns>
-        ///     The object returned by the delegate.
-        /// </returns>
-        object ISynchronizeInvoke.EndInvoke(IAsyncResult asyncResult)
-        {
-            return _Form.EndInvoke(asyncResult);
-        }
+    /// <summary>
+    ///     This gets a bool indicating whether the caller must use Invoke.
+    /// </summary>
+    bool ISynchronizeInvoke.InvokeRequired => Thread.VolatileRead(ref _ThreadId) != GetCurrentThreadId();
 
-        /// <summary>
-        ///     This executes a delegate on the thread hosting this object.
-        /// </summary>
-        /// <param name="method">
-        ///     The delegate to execute.
-        /// </param>
-        /// <param name="args">
-        ///     The arguments to pass to the delegate.
-        /// </param>
-        /// <returns>
-        ///     The object returned by the delegate.
-        /// </returns>
-        object ISynchronizeInvoke.Invoke(Delegate method, object[] args)
-        {
-            return Thread.VolatileRead(ref _ThreadId) != GetCurrentThreadId() ? _Form.Invoke(method, args) : method.DynamicInvoke(args);
-        }
+    [DllImport("kernel32.dll")]
+    private static extern int GetCurrentThreadId();
 
-        /// <summary>
-        ///     This gets a bool indicating whether the caller must use Invoke.
-        /// </summary>
-        bool ISynchronizeInvoke.InvokeRequired => Thread.VolatileRead(ref _ThreadId) != GetCurrentThreadId();
+    /// <summary>
+    ///     This starts a message loop on the current thread.
+    /// </summary>
+    public void Run()
+    {
+        _Form.Show();
+        Application.Run();
+    }
 
-        [DllImport("kernel32.dll")]
-        private static extern int GetCurrentThreadId();
-
-        /// <summary>
-        ///     This starts a message loop on the current thread.
-        /// </summary>
-        public void Run()
-        {
-            _Form.Show();
-            Application.Run();
-        }
-
-        /// <summary>
-        ///     This starts a message loop on the current thread and shows the specified form.
-        /// </summary>
-        /// <param name="form">
-        ///     The Form to display.
-        /// </param>
-        public void Run(Form form)
-        {
-            _Form.Show();
-            Application.Run(form);
-        }
-    } // class
-} // namespace
+    /// <summary>
+    ///     This starts a message loop on the current thread and shows the specified form.
+    /// </summary>
+    /// <param name="form">
+    ///     The Form to display.
+    /// </param>
+    public void Run(Form form)
+    {
+        _Form.Show();
+        Application.Run(form);
+    }
+} // class
+// namespace

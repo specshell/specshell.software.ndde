@@ -36,46 +36,46 @@
 using System.Text;
 using NDde.Internal.Client;
 
-namespace NDde.Client
+namespace NDde.Client;
+
+/// <summary>
+///     This contains information about the <c>Advise</c> event.
+/// </summary>
+/// <threadsafety static="true" instance="false" />
+public sealed class DdeAdviseEventArgs : DdeEventArgs
 {
-    /// <summary>
-    ///     This contains information about the <c>Advise</c> event.
-    /// </summary>
-    /// <threadsafety static="true" instance="false" />
-    public sealed class DdeAdviseEventArgs : DdeEventArgs
+    private readonly DdemlAdviseEventArgs _DdemlObject;
+    private readonly Encoding _Encoding;
+
+    internal DdeAdviseEventArgs(DdemlAdviseEventArgs args, Encoding encoding)
     {
-        private readonly DdemlAdviseEventArgs _DdemlObject;
-        private readonly Encoding _Encoding;
+        _DdemlObject = args;
+        _Encoding = encoding;
+    }
 
-        internal DdeAdviseEventArgs(DdemlAdviseEventArgs args, Encoding encoding)
-        {
-            _DdemlObject = args;
-            _Encoding = encoding;
-        }
+    /// <summary>
+    ///     This gets the item name associated with this notification.
+    /// </summary>
+    public string Item => _DdemlObject.Item;
 
-        /// <summary>
-        ///     This gets the item name associated with this notification.
-        /// </summary>
-        public string Item => _DdemlObject.Item;
+    /// <summary>
+    ///     This gets the format of the data included in this notification.
+    /// </summary>
+    public int Format => _DdemlObject.Format;
 
-        /// <summary>
-        ///     This gets the format of the data included in this notification.
-        /// </summary>
-        public int Format => _DdemlObject.Format;
+    /// <summary>
+    ///     This gets an application defined data object associated with this advise loop.
+    /// </summary>
+    public object State => _DdemlObject.State;
 
-        /// <summary>
-        ///     This gets an application defined data object associated with this advise loop.
-        /// </summary>
-        public object State => _DdemlObject.State;
+    /// <summary>
+    ///     This gets the data associated with this notification or null if this is not a hot advise loop.
+    /// </summary>
+    public byte[] Data => _DdemlObject.Data;
 
-        /// <summary>
-        ///     This gets the data associated with this notification or null if this is not a hot advise loop.
-        /// </summary>
-        public byte[] Data => _DdemlObject.Data;
-
-        /// <summary>
-        ///     This gets the text associated with this notification or null if this is not a hot advise loop.
-        /// </summary>
-        public string Text => _DdemlObject.Data != null ? _Encoding.GetString(_DdemlObject.Data) : null;
-    } // class
-} // namespace
+    /// <summary>
+    ///     This gets the text associated with this notification or null if this is not a hot advise loop.
+    /// </summary>
+    public string Text => _DdemlObject.Data != null ? _Encoding.GetString(_DdemlObject.Data) : null;
+} // class
+// namespace

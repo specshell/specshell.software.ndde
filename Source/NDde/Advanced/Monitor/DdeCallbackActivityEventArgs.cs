@@ -33,67 +33,66 @@
 
 #endregion
 
-using System;
 using NDde.Internal.Advanced.Monitor;
 
-namespace NDde.Advanced.Monitor
+namespace NDde.Advanced.Monitor;
+
+/// <summary>
+///     This contains information about the <c>CallbackActivity</c> event.
+/// </summary>
+public sealed class DdeCallbackActivityEventArgs : DdeActivityEventArgs
 {
-    /// <summary>
-    ///     This contains information about the <c>CallbackActivity</c> event.
-    /// </summary>
-    public sealed class DdeCallbackActivityEventArgs : DdeActivityEventArgs
+    private readonly DdemlCallbackActivityEventArgs _DdemlObject;
+
+    internal DdeCallbackActivityEventArgs(DdemlCallbackActivityEventArgs args) : base(args)
     {
-        private readonly DdemlCallbackActivityEventArgs _DdemlObject;
+        _DdemlObject = args;
+    }
 
-        internal DdeCallbackActivityEventArgs(DdemlCallbackActivityEventArgs args) : base(args)
-        {
-            _DdemlObject = args;
-        }
+    /// <summary>
+    ///     See the MSDN documentation for information about this member.
+    /// </summary>
+    public int uType => _DdemlObject.uType;
 
-        /// <summary>
-        ///     See the MSDN documentation for information about this member.
-        /// </summary>
-        public int uType => _DdemlObject.uType;
+    /// <summary>
+    ///     See the MSDN documentation for information about this member.
+    /// </summary>
+    public int uFmt => _DdemlObject.uFmt;
 
-        /// <summary>
-        ///     See the MSDN documentation for information about this member.
-        /// </summary>
-        public int uFmt => _DdemlObject.uFmt;
+    /// <summary>
+    ///     See the MSDN documentation for information about this member.
+    /// </summary>
+    public IntPtr hConv => _DdemlObject.hConv;
 
-        /// <summary>
-        ///     See the MSDN documentation for information about this member.
-        /// </summary>
-        public IntPtr hConv => _DdemlObject.hConv;
+    /// <summary>
+    ///     See the MSDN documentation for information about this member.
+    /// </summary>
+    public IntPtr hsz1 => _DdemlObject.hsz1;
 
-        /// <summary>
-        ///     See the MSDN documentation for information about this member.
-        /// </summary>
-        public IntPtr hsz1 => _DdemlObject.hsz1;
+    /// <summary>
+    ///     See the MSDN documentation for information about this member.
+    /// </summary>
+    public IntPtr hsz2 => _DdemlObject.hsz2;
 
-        /// <summary>
-        ///     See the MSDN documentation for information about this member.
-        /// </summary>
-        public IntPtr hsz2 => _DdemlObject.hsz2;
+    /// <summary>
+    ///     See the MSDN documentation for information about this member.
+    /// </summary>
+    public IntPtr hData => _DdemlObject.hData;
 
-        /// <summary>
-        ///     See the MSDN documentation for information about this member.
-        /// </summary>
-        public IntPtr hData => _DdemlObject.hData;
+    /// <summary>
+    ///     See the MSDN documentation for information about this member.
+    /// </summary>
+    public IntPtr dwData1 => _DdemlObject.dwData1;
 
-        /// <summary>
-        ///     See the MSDN documentation for information about this member.
-        /// </summary>
-        public IntPtr dwData1 => _DdemlObject.dwData1;
+    /// <summary>
+    ///     See the MSDN documentation for information about this member.
+    /// </summary>
+    public IntPtr dwData2 => _DdemlObject.dwData2;
 
-        /// <summary>
-        ///     See the MSDN documentation for information about this member.
-        /// </summary>
-        public IntPtr dwData2 => _DdemlObject.dwData2;
-
-        /// <summary>
-        ///     This gets the return value of the DDEML callback function.  See the MSDN documentation for information about this
-        ///     member.
-        /// </summary>
-        public IntPtr dwRet => _DdemlObject.dwRet;
-    } // class
-} // namespace
+    /// <summary>
+    ///     This gets the return value of the DDEML callback function.  See the MSDN documentation for information about this
+    ///     member.
+    /// </summary>
+    public IntPtr dwRet => _DdemlObject.dwRet;
+} // class
+// namespace

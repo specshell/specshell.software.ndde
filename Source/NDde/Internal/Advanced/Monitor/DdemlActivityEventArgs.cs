@@ -33,17 +33,15 @@
 
 #endregion
 
-using System;
+namespace NDde.Internal.Advanced.Monitor;
 
-namespace NDde.Internal.Advanced.Monitor
+internal abstract class DdemlActivityEventArgs : DdemlEventArgs
 {
-    internal abstract class DdemlActivityEventArgs : DdemlEventArgs
+    public DdemlActivityEventArgs(IntPtr taskHandle)
     {
-        public DdemlActivityEventArgs(IntPtr taskHandle)
-        {
-            TaskHandle = taskHandle;
-        }
+        TaskHandle = taskHandle;
+    }
 
-        public IntPtr TaskHandle { get; } = IntPtr.Zero;
-    } // class
-} // namespace
+    public IntPtr TaskHandle { get; } = IntPtr.Zero;
+} // class
+// namespace

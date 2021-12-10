@@ -33,34 +33,32 @@
 
 #endregion
 
-using System;
+namespace NDde.Internal.Advanced.Monitor;
 
-namespace NDde.Internal.Advanced.Monitor
+internal enum DdemlStringActivityType
 {
-    internal enum DdemlStringActivityType
+    CleanUp = Ddeml.MH_CLEANUP,
+
+    Create = Ddeml.MH_CREATE,
+
+    Delete = Ddeml.MH_DELETE,
+
+    Keep = Ddeml.MH_KEEP,
+} // enum
+
+internal sealed class DdemlStringActivityEventArgs : DdemlActivityEventArgs
+{
+    public DdemlStringActivityEventArgs(
+        string value,
+        DdemlStringActivityType action,
+        IntPtr taskHandle) : base(taskHandle)
     {
-        CleanUp = Ddeml.MH_CLEANUP,
+        Value = value;
+        Action = action;
+    }
 
-        Create = Ddeml.MH_CREATE,
+    public string Value { get; } = "";
 
-        Delete = Ddeml.MH_DELETE,
-
-        Keep = Ddeml.MH_KEEP,
-    } // enum
-
-    internal sealed class DdemlStringActivityEventArgs : DdemlActivityEventArgs
-    {
-        public DdemlStringActivityEventArgs(
-            string value,
-            DdemlStringActivityType action,
-            IntPtr taskHandle) : base(taskHandle)
-        {
-            Value = value;
-            Action = action;
-        }
-
-        public string Value { get; } = "";
-
-        public DdemlStringActivityType Action { get; } = DdemlStringActivityType.Create;
-    } // class
-} // namespace
+    public DdemlStringActivityType Action { get; } = DdemlStringActivityType.Create;
+} // class
+// namespace
