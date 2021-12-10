@@ -33,717 +33,714 @@
 
 #endregion
 
-using System;
 using System.ComponentModel;
 using System.Runtime.InteropServices;
 using System.Text;
-using System.Threading;
-using System.Windows.Forms;
 using NDde.Internal;
 using NDde.Internal.Advanced;
 using NDde.Internal.Utility;
 using Specshell.WinForm.HiddenForm;
 
-namespace NDde.Advanced
+namespace NDde.Advanced;
+
+/// <summary>
+///     This provides an execution context for <c>DdeClient</c> and <c>DdeServer</c>.
+/// </summary>
+/// <threadsafety static="true" instance="true" />
+/// <remarks>
+///     <para>
+///         This class provides a context for DDE activity.  All <c>DdeClient</c> and <c>DdeServer</c> objects must be
+///         associated with an instance of
+///         this class.  If one is not specified in their constructors then a default instance of this class is used.  This
+///         class must be initialized
+///         before it can begin sending and receiving DDE messages.  This happens automatically upon its first use by a
+///         <c>DdeClient</c> or
+///         <c>DdeServer</c>.  An application can call <c>Initialize</c> to make the initialization process occur
+///         immediately.  This is useful when a
+///         calling application expects this class to raise the <c>Register</c> and <c>Unregister</c> events or invoke the
+///         <c>ITransactionFilter.PreFilterTransaction</c> method before being used by a <c>DdeClient</c> or
+///         <c>DdeServer</c>.
+///     </para>
+///     <para>
+///         Since forms and controls implement <c>ISynchronizeInvoke</c> they can be used as the synchronizing object for
+///         this class.  When an instance
+///         of this class is created to use a form or control as the synchronizing object it will use the UI thread for
+///         execution.  This is the
+///         preferred way of creating an instance of this class when used in a windows application since it avoids
+///         multithreaded synchronization issues
+///         and cross thread marshaling.  When an instance of this class is created without specifying a synchronizing
+///         object it will create and manage
+///         its own thread for execution.  This is convenient if you wish to use this library in a console or service
+///         application, but with the added
+///         cost of cross thread marshaling and the potential for deadlocking application threads.
+///     </para>
+///     <para>
+///         Events are invoked on the thread hosting the <c>DdeContext</c>.  All operations must be marshaled onto the
+///         thread hosting the
+///         <c>DdeContext</c>.  Method calls will block until that thread becomes available.  An exception will be
+///         generated if the thread does not
+///         become available in a timely manner.
+///     </para>
+/// </remarks>
+/// <include file='Documentation/Examples.xml' path='Comment/Member[@name="DdeContext"]/*' />
+public sealed class DdeContext : IDisposable, ISynchronizeInvoke
 {
+    //internal static EventLog EventLogWriter = CreateEventsLogger.CreaterEventLogger("NDDE Events", "NdDeEventsLog");
+    private static DdeContext _Instance;
+    private static readonly object _InstanceLock = new();
+
+    private static readonly WeakReferenceDictionary<ISynchronizeInvoke, DdeContext> _Instances =
+        new();
+
+    private readonly object _LockObject = new();
+
+    private DdemlContext _DdemlObject; // This has lazy initialization through a property.
+    private Encoding _Encoding; // This is a cached DdemlContext property.
+
+    private int _InstanceId; // This is a cached DdemlContext property.
+    private bool _IsInitialized; // This is a cached DdemlContext property.
+
+    private EventHandler<DdeRegistrationEventArgs> _RegisterEvent;
+    private ISynchronizeInvoke _Synchronizer;
+    private EventHandler<DdeRegistrationEventArgs> _UnregisterEvent;
+
+    /// <overloads>
+    ///     <summary>
+    ///     </summary>
+    /// </overloads>
     /// <summary>
-    ///     This provides an execution context for <c>DdeClient</c> and <c>DdeServer</c>.
+    ///     This initializes a new instance of the <c>DdeContext</c> class that uses a dedicated thread for execution.
     /// </summary>
-    /// <threadsafety static="true" instance="true" />
+    /// <remarks>
+    ///     This constructor is used when you want the context to create and manage its own thread for DDE message pumping.
+    /// </remarks>
+    public DdeContext()
+    {
+    }
+
+    /// <summary>
+    ///     This initializes a new instance of the <c>DdeContext</c> class that uses the specified synchronizing object for
+    ///     execution.
+    /// </summary>
+    /// <param name="synchronizingObject">
+    ///     The synchronizing object to use for execution.
+    /// </param>
+    /// <exception cref="ArgumentNullException">
+    ///     This is thrown when synchronizer is a null reference.
+    /// </exception>
+    /// <remarks>
+    ///     This constructor is used when you want the context to use the specified synchronizing object for DDE message
+    ///     pumping.  Since forms and
+    ///     controls implement <c>ISynchronizeInvoke</c> they can be used as the synchronizing object.  In that case the
+    ///     windows application UI
+    ///     thread that is hosting the form or control is used.
+    /// </remarks>
+    public DdeContext(ISynchronizeInvoke synchronizingObject)
+    {
+        Synchronizer = synchronizingObject;
+    }
+
+    private ISynchronizeInvoke Synchronizer
+    {
+        get
+        {
+            lock (_LockObject)
+            {
+                return _Synchronizer ??= new DdeThread();
+            }
+        }
+        set
+        {
+            lock (_LockObject)
+            {
+                _Synchronizer = value;
+            }
+        }
+    }
+
+    /// <summary>
+    /// </summary>
+    internal DdemlContext DdemlObject
+    {
+        get
+        {
+            lock (_LockObject)
+            {
+                if (_DdemlObject != null) return _DdemlObject;
+                _DdemlObject = new DdemlContext();
+                _DdemlObject.Register += OnRegister;
+                _DdemlObject.Unregister += OnUnregister;
+                _DdemlObject.StateChange += OnStateChange;
+
+                return _DdemlObject;
+            }
+        }
+    }
+
+    /// <summary>
+    ///     This gets the DDEML instance identifier.
+    /// </summary>
     /// <remarks>
     ///     <para>
-    ///         This class provides a context for DDE activity.  All <c>DdeClient</c> and <c>DdeServer</c> objects must be
-    ///         associated with an instance of
-    ///         this class.  If one is not specified in their constructors then a default instance of this class is used.  This
-    ///         class must be initialized
-    ///         before it can begin sending and receiving DDE messages.  This happens automatically upon its first use by a
-    ///         <c>DdeClient</c> or
-    ///         <c>DdeServer</c>.  An application can call <c>Initialize</c> to make the initialization process occur
-    ///         immediately.  This is useful when a
-    ///         calling application expects this class to raise the <c>Register</c> and <c>Unregister</c> events or invoke the
+    ///         This can be used in any DDEML function requiring an instance identifier.
+    ///     </para>
+    ///     <para>
+    ///         <note type="caution">
+    ///             Incorrect usage of the DDEML can cause this library to function incorrectly and can lead to resource leaks.
+    ///         </note>
+    ///     </para>
+    /// </remarks>
+    public int InstanceId
+    {
+        get
+        {
+            lock (_LockObject)
+            {
+                return _InstanceId;
+            }
+        }
+    }
+
+    /// <summary>
+    ///     This gets a bool indicating whether the context is initialized.
+    /// </summary>
+    public bool IsInitialized
+    {
+        get
+        {
+            lock (_LockObject)
+            {
+                return _IsInitialized;
+            }
+        }
+    }
+
+    /// <summary>
+    ///     This gets or sets the default encoding that is used.
+    /// </summary>
+    public Encoding Encoding
+    {
+        get
+        {
+            lock (_LockObject)
+            {
+                if (_Encoding != null) return _Encoding;
+                Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+                _Encoding = Encoding.GetEncoding(1252);
+
+                return _Encoding;
+            }
+        }
+        set
+        {
+            void InnerEncoding()
+            {
+                DdemlObject.Encoding = value;
+                _Encoding = value;
+            }
+
+            Invoke(InnerEncoding);
+        }
+    }
+
+    /// <summary>
+    ///     This releases all resources held by this instance.
+    /// </summary>
+    public void Dispose()
+    {
+        Dispose(true);
+    }
+
+    /// <summary>
+    ///     This gets a bool indicating whether the caller must use Invoke.
+    /// </summary>
+    public bool InvokeRequired => Synchronizer.InvokeRequired;
+
+    /// <summary>
+    ///     This executes a delegate on the thread hosting this object.
+    /// </summary>
+    /// <param name="method">
+    ///     The delegate to execute.
+    /// </param>
+    /// <param name="args">
+    ///     The arguments to pass to the delegate.
+    /// </param>
+    /// <returns>
+    ///     The object returned by the delegate.
+    /// </returns>
+    public object Invoke(Delegate method, object[] args)
+    {
+        return Synchronizer.Invoke(method, args);
+    }
+
+    /// <summary>
+    ///     This begins an asynchronous operation to execute a delegate on the thread hosting this object.
+    /// </summary>
+    /// <param name="method">
+    ///     The delegate to execute.
+    /// </param>
+    /// <param name="args">
+    ///     The arguments to pass to the delegate.
+    /// </param>
+    /// <returns>
+    ///     An <c>IAsyncResult</c> object for this operation.
+    /// </returns>
+    public IAsyncResult BeginInvoke(Delegate method, object[] args)
+    {
+        return Synchronizer.BeginInvoke(method, args);
+    }
+
+    /// <summary>
+    ///     This returns the object that the delegate returned in the operation.
+    /// </summary>
+    /// <param name="asyncResult">
+    ///     The <c>IAsyncResult</c> object returned by a call to <c>BeginInvoke</c>.
+    /// </param>
+    /// <returns>
+    ///     The object returned by the delegate.
+    /// </returns>
+    public object EndInvoke(IAsyncResult asyncResult)
+    {
+        return Synchronizer.EndInvoke(asyncResult);
+    }
+
+    internal static DdeContext GetDefault()
+    {
+        lock (_InstanceLock)
+        {
+            return _Instance ??= new DdeContext();
+        }
+    }
+
+    internal static DdeContext GetDefault(ISynchronizeInvoke synchronizingObject)
+    {
+        if (synchronizingObject == null) return GetDefault();
+        lock (_Instances)
+        {
+            var context = _Instances[synchronizingObject];
+            if (context != null) return context;
+            if (synchronizingObject is DdeContext ddeContext)
+                context = ddeContext;
+            else
+                context = new DdeContext(synchronizingObject);
+            _Instances.Add(synchronizingObject, context);
+
+            return context;
+        }
+    }
+
+    /// <summary>
+    ///     This is raised when a service name has been registered by a server using the DDEML.
+    /// </summary>
+    /// <remarks>
+    ///     This event will not be raised by servers that do not use the DDEML.
+    /// </remarks>
+    public event EventHandler<DdeRegistrationEventArgs> Register
+    {
+        add
+        {
+            lock (_LockObject)
+            {
+                _RegisterEvent += value;
+            }
+        }
+        remove
+        {
+            lock (_LockObject)
+            {
+                _RegisterEvent -= value;
+            }
+        }
+    }
+
+    /// <summary>
+    ///     This is raised when a service name has been unregistered by a server using the DDEML.
+    /// </summary>
+    /// <remarks>
+    ///     This event will not be raised by servers that do not use the DDEML.
+    /// </remarks>
+    public event EventHandler<DdeRegistrationEventArgs> Unregister
+    {
+        add
+        {
+            lock (_LockObject)
+            {
+                _UnregisterEvent += value;
+            }
+        }
+        remove
+        {
+            lock (_LockObject)
+            {
+                _UnregisterEvent -= value;
+            }
+        }
+    }
+
+    private void Dispose(bool disposing)
+    {
+        if (!disposing) return;
+
+        void InnerDispose()
+        {
+            DdemlObject.Dispose();
+        }
+
+        try
+        {
+            Invoke(InnerDispose);
+
+            // Dispose the synchronizer if it was created internally.
+            var synchronizer = Synchronizer as DdeThread;
+            synchronizer?.Dispose();
+        }
+        catch
+        {
+            // Swallow any exception that occurs.
+        }
+    }
+
+    /// <summary>
+    ///     This initializes the context.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">
+    ///     This is thrown when the context is already initialized.
+    /// </exception>
+    /// <exception cref="DdeException">
+    ///     This is thrown when the context could not be initialized.
+    /// </exception>
+    /// <remarks>
+    ///     <para>
+    ///         This class must be initialized before it can begin sending and receiving DDE messages.  This happens
+    ///         automatically upon its first use by
+    ///         a <c>DdeClient</c> or <c>DdeServer</c>.  An application can call <c>Initialize</c> to make the initialization
+    ///         process occur immediately.
+    ///         This is useful when a calling application expects this class to raise the <c>Register</c> and <c>Unregister</c>
+    ///         events or invoke the
     ///         <c>ITransactionFilter.PreFilterTransaction</c> method before being used by a <c>DdeClient</c> or
     ///         <c>DdeServer</c>.
     ///     </para>
     ///     <para>
-    ///         Since forms and controls implement <c>ISynchronizeInvoke</c> they can be used as the synchronizing object for
-    ///         this class.  When an instance
-    ///         of this class is created to use a form or control as the synchronizing object it will use the UI thread for
-    ///         execution.  This is the
-    ///         preferred way of creating an instance of this class when used in a windows application since it avoids
-    ///         multithreaded synchronization issues
-    ///         and cross thread marshaling.  When an instance of this class is created without specifying a synchronizing
-    ///         object it will create and manage
-    ///         its own thread for execution.  This is convenient if you wish to use this library in a console or service
-    ///         application, but with the added
-    ///         cost of cross thread marshaling and the potential for deadlocking application threads.
+    ///         If you attempt to use a synchronizer that is not hosted on a thread running a windows message loop an exception
+    ///         will be thrown.
     ///     </para>
     ///     <para>
-    ///         Events are invoked on the thread hosting the <c>DdeContext</c>.  All operations must be marshaled onto the
-    ///         thread hosting the
-    ///         <c>DdeContext</c>.  Method calls will block until that thread becomes available.  An exception will be
-    ///         generated if the thread does not
-    ///         become available in a timely manner.
+    ///         Explicitly calling this method will allow added <c>ITransactionFilter</c> objects to begin intercepting the
+    ///         DDEML callback function.
     ///     </para>
     /// </remarks>
-    /// <include file='Documentation/Examples.xml' path='Comment/Member[@name="DdeContext"]/*' />
-    public sealed class DdeContext : IDisposable, ISynchronizeInvoke
+    public void Initialize()
     {
-        //internal static EventLog EventLogWriter = CreateEventsLogger.CreaterEventLogger("NDDE Events", "NdDeEventsLog");
-        private static DdeContext _Instance;
-        private static readonly object _InstanceLock = new();
+        void InnerInitialize()
+        {
+            DdemlObject.Initialize();
+            _InstanceId = DdemlObject.InstanceId;
+            _IsInitialized = DdemlObject.IsInitialized;
+        }
 
-        private static readonly WeakReferenceDictionary<ISynchronizeInvoke, DdeContext> _Instances =
-            new();
+        try
+        {
+            Invoke(InnerInitialize);
+        }
+        catch (DdemlException e)
+        {
+            throw new DdeException(e);
+        }
+        catch (ObjectDisposedException e)
+        {
+            throw new ObjectDisposedException(GetType().ToString(), e);
+        }
+    }
+
+    /// <summary>
+    ///     This adds a transaction filter to monitor DDE transactions.
+    /// </summary>
+    /// <param name="filter">
+    ///     The implementation of <c>ITransactionFilter</c> that you want to add.
+    /// </param>
+    /// <exception cref="ArgumentNullException">
+    ///     This is thrown when filter is a null reference.
+    /// </exception>
+    /// <exception cref="InvalidOperationException">
+    ///     This is thrown when the filter was already added.
+    /// </exception>
+    /// <remarks>
+    ///     <para>
+    ///         Transaction filters can be used to intercept the DDEML callback.
+    ///     </para>
+    ///     <para>
+    ///         <note type="caution">
+    ///             Incorrect usage of the DDEML can cause this library to function incorrectly and can lead to resource leaks.
+    ///         </note>
+    ///     </para>
+    /// </remarks>
+    public void AddTransactionFilter(IDdeTransactionFilter filter)
+    {
+        void InnerAddTransactionFilter()
+        {
+            IDdemlTransactionFilter tf = filter == null ? null : new DdemlTransactionFilter(filter);
+            DdemlObject.AddTransactionFilter(tf);
+        }
+
+        try
+        {
+            Invoke(InnerAddTransactionFilter);
+        }
+        catch (ObjectDisposedException e)
+        {
+            throw new ObjectDisposedException(GetType().ToString(), e);
+        }
+    }
+
+    /// <summary>
+    ///     This removes a transaction filter and stops it from monitoring DDE transactions.
+    /// </summary>
+    /// <param name="filter">
+    ///     The implementation of <c>ITransactionFilter</c> that you want to remove.
+    /// </param>
+    /// <exception cref="ArgumentNullException">
+    ///     This is thrown when filter is a null reference.
+    /// </exception>
+    /// <exception cref="InvalidOperationException">
+    ///     This is thrown when the filter was not previously added.
+    /// </exception>
+    /// <remarks>
+    ///     <para>
+    ///         Transaction filters can be used to intercept the DDEML callback.
+    ///     </para>
+    ///     <para>
+    ///         <note type="caution">
+    ///             Incorrect usage of the DDEML can cause this library to function incorrectly and can lead to resource leaks.
+    ///         </note>
+    ///     </para>
+    /// </remarks>
+    public void RemoveTransactionFilter(IDdeTransactionFilter filter)
+    {
+        void InnerRemoveTransactionFilter()
+        {
+            IDdemlTransactionFilter tf = filter == null ? null : new DdemlTransactionFilter(filter);
+            DdemlObject.RemoveTransactionFilter(tf);
+        }
+
+        try
+        {
+            Invoke(InnerRemoveTransactionFilter);
+        }
+        catch (ObjectDisposedException e)
+        {
+            throw new ObjectDisposedException(GetType().ToString(), e);
+        }
+    }
+
+    /// <summary>
+    ///     This executes a ThreadStart delegate on the thread hosting this object.
+    /// </summary>
+    /// <param name="method">
+    ///     The delegate to execute.
+    /// </param>
+    internal void Invoke(ThreadStart method)
+    {
+        Invoke(method, null);
+    }
+
+    private void OnRegister(object sender, DdemlRegistrationEventArgs internalArgs)
+    {
+        EventHandler<DdeRegistrationEventArgs> copy;
+
+        // To make this thread-safe we need to hold a local copy of the reference to the invocation list.  This works because delegates are
+        // immutable.
+        lock (_LockObject)
+        {
+            copy = _RegisterEvent;
+        }
+
+        copy?.Invoke(this, new DdeRegistrationEventArgs(internalArgs));
+    }
+
+    private void OnUnregister(object sender, DdemlRegistrationEventArgs internalArgs)
+    {
+        EventHandler<DdeRegistrationEventArgs> copy;
+
+        // To make this thread-safe we need to hold a local copy of the reference to the invocation list.  This works because delegates are
+        // immutable.
+        lock (_LockObject)
+        {
+            copy = _UnregisterEvent;
+        }
+
+        copy?.Invoke(this, new DdeRegistrationEventArgs(internalArgs));
+    }
+
+    private void OnStateChange(object sender, EventArgs args)
+    {
+        lock (_LockObject)
+        {
+            _InstanceId = _DdemlObject.InstanceId;
+            _IsInitialized = _DdemlObject.IsInitialized;
+        }
+    }
+
+    /// <threadsafety static="true" instance="true" />
+    private sealed class DdemlTransactionFilter : IDdemlTransactionFilter
+    {
+        private readonly IDdeTransactionFilter _OuterFilter;
+
+        public DdemlTransactionFilter(IDdeTransactionFilter filter)
+        {
+            _OuterFilter = filter;
+        }
+
+        public bool PreFilterTransaction(DdemlTransaction t)
+        {
+            return _OuterFilter.PreFilterTransaction(new DdeTransaction(t));
+        }
+
+        public override bool Equals(object obj)
+        {
+            if (obj is DdemlTransactionFilter target)
+                return _OuterFilter.Equals(target._OuterFilter);
+            return false;
+        }
+
+        public override int GetHashCode()
+        {
+            return _OuterFilter.GetHashCode();
+        }
+    } // class
+
+    /// <threadsafety static="true" instance="true" />
+    private sealed class DdeThread : IDisposable, ISynchronizeInvoke
+    {
+        private readonly Form _Form = new HiddenForm();
+
+        private readonly ManualResetEvent _Initialized = new(false);
 
         private readonly object _LockObject = new();
+        private readonly Thread _Thread;
 
-        private DdemlContext _DdemlObject; // This has lazy initialization through a property.
-        private Encoding _Encoding; // This is a cached DdemlContext property.
+        private int _ThreadId;
 
-        private int _InstanceId; // This is a cached DdemlContext property.
-        private bool _IsInitialized; // This is a cached DdemlContext property.
-
-        private EventHandler<DdeRegistrationEventArgs> _RegisterEvent;
-        private ISynchronizeInvoke _Synchronizer;
-        private EventHandler<DdeRegistrationEventArgs> _UnregisterEvent;
-
-        /// <overloads>
-        ///     <summary>
-        ///     </summary>
-        /// </overloads>
-        /// <summary>
-        ///     This initializes a new instance of the <c>DdeContext</c> class that uses a dedicated thread for execution.
-        /// </summary>
-        /// <remarks>
-        ///     This constructor is used when you want the context to create and manage its own thread for DDE message pumping.
-        /// </remarks>
-        public DdeContext()
+        public DdeThread()
         {
+            _Form.Load += Form_Load;
+            _Thread = new Thread(Run);
+            _Thread.SetApartmentState(ApartmentState.STA);
+            _Thread.Name = "DdeMessagePump";
+            _Thread.IsBackground = true;
         }
 
-        /// <summary>
-        ///     This initializes a new instance of the <c>DdeContext</c> class that uses the specified synchronizing object for
-        ///     execution.
-        /// </summary>
-        /// <param name="synchronizingObject">
-        ///     The synchronizing object to use for execution.
-        /// </param>
-        /// <exception cref="ArgumentNullException">
-        ///     This is thrown when synchronizer is a null reference.
-        /// </exception>
-        /// <remarks>
-        ///     This constructor is used when you want the context to use the specified synchronizing object for DDE message
-        ///     pumping.  Since forms and
-        ///     controls implement <c>ISynchronizeInvoke</c> they can be used as the synchronizing object.  In that case the
-        ///     windows application UI
-        ///     thread that is hosting the form or control is used.
-        /// </remarks>
-        public DdeContext(ISynchronizeInvoke synchronizingObject)
-        {
-            Synchronizer = synchronizingObject;
-        }
-
-        private ISynchronizeInvoke Synchronizer
-        {
-            get
-            {
-                lock (_LockObject)
-                {
-                    return _Synchronizer ??= new DdeThread();
-                }
-            }
-            set
-            {
-                lock (_LockObject)
-                {
-                    _Synchronizer = value;
-                }
-            }
-        }
-
-        /// <summary>
-        /// </summary>
-        internal DdemlContext DdemlObject
-        {
-            get
-            {
-                lock (_LockObject)
-                {
-                    if (_DdemlObject != null) return _DdemlObject;
-                    _DdemlObject = new DdemlContext();
-                    _DdemlObject.Register += OnRegister;
-                    _DdemlObject.Unregister += OnUnregister;
-                    _DdemlObject.StateChange += OnStateChange;
-
-                    return _DdemlObject;
-                }
-            }
-        }
-
-        /// <summary>
-        ///     This gets the DDEML instance identifier.
-        /// </summary>
-        /// <remarks>
-        ///     <para>
-        ///         This can be used in any DDEML function requiring an instance identifier.
-        ///     </para>
-        ///     <para>
-        ///         <note type="caution">
-        ///             Incorrect usage of the DDEML can cause this library to function incorrectly and can lead to resource leaks.
-        ///         </note>
-        ///     </para>
-        /// </remarks>
-        public int InstanceId
-        {
-            get
-            {
-                lock (_LockObject)
-                {
-                    return _InstanceId;
-                }
-            }
-        }
-
-        /// <summary>
-        ///     This gets a bool indicating whether the context is initialized.
-        /// </summary>
-        public bool IsInitialized
-        {
-            get
-            {
-                lock (_LockObject)
-                {
-                    return _IsInitialized;
-                }
-            }
-        }
-
-        /// <summary>
-        ///     This gets or sets the default encoding that is used.
-        /// </summary>
-        public Encoding Encoding
-        {
-            get
-            {
-                lock (_LockObject)
-                {
-                    if (_Encoding != null) return _Encoding;
-                    Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
-                    _Encoding = Encoding.GetEncoding(1252);
-
-                    return _Encoding;
-                }
-            }
-            set
-            {
-                void InnerEncoding()
-                {
-                    DdemlObject.Encoding = value;
-                    _Encoding = value;
-                }
-
-                Invoke(InnerEncoding);
-            }
-        }
-
-        /// <summary>
-        ///     This releases all resources held by this instance.
-        /// </summary>
         public void Dispose()
         {
-            Dispose(true);
-        }
-
-        /// <summary>
-        ///     This gets a bool indicating whether the caller must use Invoke.
-        /// </summary>
-        public bool InvokeRequired => Synchronizer.InvokeRequired;
-
-        /// <summary>
-        ///     This executes a delegate on the thread hosting this object.
-        /// </summary>
-        /// <param name="method">
-        ///     The delegate to execute.
-        /// </param>
-        /// <param name="args">
-        ///     The arguments to pass to the delegate.
-        /// </param>
-        /// <returns>
-        ///     The object returned by the delegate.
-        /// </returns>
-        public object Invoke(Delegate method, object[] args)
-        {
-            return Synchronizer.Invoke(method, args);
-        }
-
-        /// <summary>
-        ///     This begins an asynchronous operation to execute a delegate on the thread hosting this object.
-        /// </summary>
-        /// <param name="method">
-        ///     The delegate to execute.
-        /// </param>
-        /// <param name="args">
-        ///     The arguments to pass to the delegate.
-        /// </param>
-        /// <returns>
-        ///     An <c>IAsyncResult</c> object for this operation.
-        /// </returns>
-        public IAsyncResult BeginInvoke(Delegate method, object[] args)
-        {
-            return Synchronizer.BeginInvoke(method, args);
-        }
-
-        /// <summary>
-        ///     This returns the object that the delegate returned in the operation.
-        /// </summary>
-        /// <param name="asyncResult">
-        ///     The <c>IAsyncResult</c> object returned by a call to <c>BeginInvoke</c>.
-        /// </param>
-        /// <returns>
-        ///     The object returned by the delegate.
-        /// </returns>
-        public object EndInvoke(IAsyncResult asyncResult)
-        {
-            return Synchronizer.EndInvoke(asyncResult);
-        }
-
-        internal static DdeContext GetDefault()
-        {
-            lock (_InstanceLock)
-            {
-                return _Instance ??= new DdeContext();
-            }
-        }
-
-        internal static DdeContext GetDefault(ISynchronizeInvoke synchronizingObject)
-        {
-            if (synchronizingObject == null) return GetDefault();
-            lock (_Instances)
-            {
-                var context = _Instances[synchronizingObject];
-                if (context != null) return context;
-                if (synchronizingObject is DdeContext ddeContext)
-                    context = ddeContext;
-                else
-                    context = new DdeContext(synchronizingObject);
-                _Instances.Add(synchronizingObject, context);
-
-                return context;
-            }
-        }
-
-        /// <summary>
-        ///     This is raised when a service name has been registered by a server using the DDEML.
-        /// </summary>
-        /// <remarks>
-        ///     This event will not be raised by servers that do not use the DDEML.
-        /// </remarks>
-        public event EventHandler<DdeRegistrationEventArgs> Register
-        {
-            add
-            {
-                lock (_LockObject)
-                {
-                    _RegisterEvent += value;
-                }
-            }
-            remove
-            {
-                lock (_LockObject)
-                {
-                    _RegisterEvent -= value;
-                }
-            }
-        }
-
-        /// <summary>
-        ///     This is raised when a service name has been unregistered by a server using the DDEML.
-        /// </summary>
-        /// <remarks>
-        ///     This event will not be raised by servers that do not use the DDEML.
-        /// </remarks>
-        public event EventHandler<DdeRegistrationEventArgs> Unregister
-        {
-            add
-            {
-                lock (_LockObject)
-                {
-                    _UnregisterEvent += value;
-                }
-            }
-            remove
-            {
-                lock (_LockObject)
-                {
-                    _UnregisterEvent -= value;
-                }
-            }
-        }
-
-        private void Dispose(bool disposing)
-        {
-            if (!disposing) return;
-
-            void InnerDispose()
-            {
-                DdemlObject.Dispose();
-            }
-
-            try
-            {
-                Invoke(InnerDispose);
-
-                // Dispose the synchronizer if it was created internally.
-                var synchronizer = Synchronizer as DdeThread;
-                synchronizer?.Dispose();
-            }
-            catch
-            {
-                // Swallow any exception that occurs.
-            }
-        }
-
-        /// <summary>
-        ///     This initializes the context.
-        /// </summary>
-        /// <exception cref="InvalidOperationException">
-        ///     This is thrown when the context is already initialized.
-        /// </exception>
-        /// <exception cref="DdeException">
-        ///     This is thrown when the context could not be initialized.
-        /// </exception>
-        /// <remarks>
-        ///     <para>
-        ///         This class must be initialized before it can begin sending and receiving DDE messages.  This happens
-        ///         automatically upon its first use by
-        ///         a <c>DdeClient</c> or <c>DdeServer</c>.  An application can call <c>Initialize</c> to make the initialization
-        ///         process occur immediately.
-        ///         This is useful when a calling application expects this class to raise the <c>Register</c> and <c>Unregister</c>
-        ///         events or invoke the
-        ///         <c>ITransactionFilter.PreFilterTransaction</c> method before being used by a <c>DdeClient</c> or
-        ///         <c>DdeServer</c>.
-        ///     </para>
-        ///     <para>
-        ///         If you attempt to use a synchronizer that is not hosted on a thread running a windows message loop an exception
-        ///         will be thrown.
-        ///     </para>
-        ///     <para>
-        ///         Explicitly calling this method will allow added <c>ITransactionFilter</c> objects to begin intercepting the
-        ///         DDEML callback function.
-        ///     </para>
-        /// </remarks>
-        public void Initialize()
-        {
-            void InnerInitialize()
-            {
-                DdemlObject.Initialize();
-                _InstanceId = DdemlObject.InstanceId;
-                _IsInitialized = DdemlObject.IsInitialized;
-            }
-
-            try
-            {
-                Invoke(InnerInitialize);
-            }
-            catch (DdemlException e)
-            {
-                throw new DdeException(e);
-            }
-            catch (ObjectDisposedException e)
-            {
-                throw new ObjectDisposedException(GetType().ToString(), e);
-            }
-        }
-
-        /// <summary>
-        ///     This adds a transaction filter to monitor DDE transactions.
-        /// </summary>
-        /// <param name="filter">
-        ///     The implementation of <c>ITransactionFilter</c> that you want to add.
-        /// </param>
-        /// <exception cref="ArgumentNullException">
-        ///     This is thrown when filter is a null reference.
-        /// </exception>
-        /// <exception cref="InvalidOperationException">
-        ///     This is thrown when the filter was already added.
-        /// </exception>
-        /// <remarks>
-        ///     <para>
-        ///         Transaction filters can be used to intercept the DDEML callback.
-        ///     </para>
-        ///     <para>
-        ///         <note type="caution">
-        ///             Incorrect usage of the DDEML can cause this library to function incorrectly and can lead to resource leaks.
-        ///         </note>
-        ///     </para>
-        /// </remarks>
-        public void AddTransactionFilter(IDdeTransactionFilter filter)
-        {
-            void InnerAddTransactionFilter()
-            {
-                IDdemlTransactionFilter tf = filter == null ? null : new DdemlTransactionFilter(filter);
-                DdemlObject.AddTransactionFilter(tf);
-            }
-
-            try
-            {
-                Invoke(InnerAddTransactionFilter);
-            }
-            catch (ObjectDisposedException e)
-            {
-                throw new ObjectDisposedException(GetType().ToString(), e);
-            }
-        }
-
-        /// <summary>
-        ///     This removes a transaction filter and stops it from monitoring DDE transactions.
-        /// </summary>
-        /// <param name="filter">
-        ///     The implementation of <c>ITransactionFilter</c> that you want to remove.
-        /// </param>
-        /// <exception cref="ArgumentNullException">
-        ///     This is thrown when filter is a null reference.
-        /// </exception>
-        /// <exception cref="InvalidOperationException">
-        ///     This is thrown when the filter was not previously added.
-        /// </exception>
-        /// <remarks>
-        ///     <para>
-        ///         Transaction filters can be used to intercept the DDEML callback.
-        ///     </para>
-        ///     <para>
-        ///         <note type="caution">
-        ///             Incorrect usage of the DDEML can cause this library to function incorrectly and can lead to resource leaks.
-        ///         </note>
-        ///     </para>
-        /// </remarks>
-        public void RemoveTransactionFilter(IDdeTransactionFilter filter)
-        {
-            void InnerRemoveTransactionFilter()
-            {
-                IDdemlTransactionFilter tf = filter == null ? null : new DdemlTransactionFilter(filter);
-                DdemlObject.RemoveTransactionFilter(tf);
-            }
-
-            try
-            {
-                Invoke(InnerRemoveTransactionFilter);
-            }
-            catch (ObjectDisposedException e)
-            {
-                throw new ObjectDisposedException(GetType().ToString(), e);
-            }
-        }
-
-        /// <summary>
-        ///     This executes a ThreadStart delegate on the thread hosting this object.
-        /// </summary>
-        /// <param name="method">
-        ///     The delegate to execute.
-        /// </param>
-        internal void Invoke(ThreadStart method)
-        {
-            Invoke(method, null);
-        }
-
-        private void OnRegister(object sender, DdemlRegistrationEventArgs internalArgs)
-        {
-            EventHandler<DdeRegistrationEventArgs> copy;
-
-            // To make this thread-safe we need to hold a local copy of the reference to the invocation list.  This works because delegates are
-            // immutable.
             lock (_LockObject)
             {
-                copy = _RegisterEvent;
-            }
-
-            copy?.Invoke(this, new DdeRegistrationEventArgs(internalArgs));
-        }
-
-        private void OnUnregister(object sender, DdemlRegistrationEventArgs internalArgs)
-        {
-            EventHandler<DdeRegistrationEventArgs> copy;
-
-            // To make this thread-safe we need to hold a local copy of the reference to the invocation list.  This works because delegates are
-            // immutable.
-            lock (_LockObject)
-            {
-                copy = _UnregisterEvent;
-            }
-
-            copy?.Invoke(this, new DdeRegistrationEventArgs(internalArgs));
-        }
-
-        private void OnStateChange(object sender, EventArgs args)
-        {
-            lock (_LockObject)
-            {
-                _InstanceId = _DdemlObject.InstanceId;
-                _IsInitialized = _DdemlObject.IsInitialized;
-            }
-        }
-
-        /// <threadsafety static="true" instance="true" />
-        private sealed class DdemlTransactionFilter : IDdemlTransactionFilter
-        {
-            private readonly IDdeTransactionFilter _OuterFilter;
-
-            public DdemlTransactionFilter(IDdeTransactionFilter filter)
-            {
-                _OuterFilter = filter;
-            }
-
-            public bool PreFilterTransaction(DdemlTransaction t)
-            {
-                return _OuterFilter.PreFilterTransaction(new DdeTransaction(t));
-            }
-
-            public override bool Equals(object obj)
-            {
-                if (obj is DdemlTransactionFilter target)
-                    return _OuterFilter.Equals(target._OuterFilter);
-                return false;
-            }
-
-            public override int GetHashCode()
-            {
-                return _OuterFilter.GetHashCode();
-            }
-        } // class
-
-        /// <threadsafety static="true" instance="true" />
-        private sealed class DdeThread : IDisposable, ISynchronizeInvoke
-        {
-            private readonly Form _Form = new HiddenForm();
-
-            private readonly ManualResetEvent _Initialized = new(false);
-
-            private readonly object _LockObject = new();
-            private readonly Thread _Thread;
-
-            private int _ThreadId;
-
-            public DdeThread()
-            {
-                _Form.Load += Form_Load;
-                _Thread = new Thread(Run);
-                _Thread.SetApartmentState(ApartmentState.STA);
-                _Thread.Name = "DdeMessagePump";
-                _Thread.IsBackground = true;
-            }
-
-            public void Dispose()
-            {
-                lock (_LockObject)
+                if ((_Thread.ThreadState & ThreadState.Unstarted) != 0)
                 {
-                    if ((_Thread.ThreadState & ThreadState.Unstarted) != 0)
-                    {
-                        _Thread.Start();
-                        _Initialized.WaitOne();
-                    }
+                    _Thread.Start();
+                    _Initialized.WaitOne();
                 }
+            }
 
-                if (InvokeRequired)
-                {
-                    void InnerDispose()
-                    {
-                        _Form.Dispose();
-                    }
-
-                    Invoke((ThreadStart) InnerDispose, null);
-                }
-                else
+            if (InvokeRequired)
+            {
+                void InnerDispose()
                 {
                     _Form.Dispose();
                 }
-            }
 
-            public bool InvokeRequired
+                Invoke((ThreadStart) InnerDispose, null);
+            }
+            else
             {
-                get
-                {
-                    lock (_LockObject)
-                    {
-                        return _ThreadId != GetCurrentThreadId();
-                    }
-                }
+                _Form.Dispose();
             }
+        }
 
-            public object Invoke(Delegate method, object[] args)
+        public bool InvokeRequired
+        {
+            get
             {
                 lock (_LockObject)
                 {
-                    if ((_Thread.ThreadState & ThreadState.Unstarted) != 0)
-                    {
-                        _Thread.Start();
-                        _Initialized.WaitOne();
-                    }
+                    return _ThreadId != GetCurrentThreadId();
                 }
+            }
+        }
 
-                if (!InvokeRequired) return method.DynamicInvoke(args);
-                try
+        public object Invoke(Delegate method, object[] args)
+        {
+            lock (_LockObject)
+            {
+                if ((_Thread.ThreadState & ThreadState.Unstarted) != 0)
                 {
-                    return _Form.Invoke(method, args);
-                }
-                catch (InvalidOperationException e)
-                {
-                    if (!_Form.IsHandleCreated)
-                        throw new ObjectDisposedException(GetType().ToString(), e);
-                    throw;
+                    _Thread.Start();
+                    _Initialized.WaitOne();
                 }
             }
 
-            public IAsyncResult BeginInvoke(Delegate method, object[] args)
+            if (!InvokeRequired) return method.DynamicInvoke(args);
+            try
             {
-                lock (_LockObject)
+                return _Form.Invoke(method, args);
+            }
+            catch (InvalidOperationException e)
+            {
+                if (!_Form.IsHandleCreated)
+                    throw new ObjectDisposedException(GetType().ToString(), e);
+                throw;
+            }
+        }
+
+        public IAsyncResult BeginInvoke(Delegate method, object[] args)
+        {
+            lock (_LockObject)
+            {
+                if ((_Thread.ThreadState & ThreadState.Unstarted) != 0)
                 {
-                    if ((_Thread.ThreadState & ThreadState.Unstarted) != 0)
-                    {
-                        _Thread.Start();
-                        _Initialized.WaitOne();
-                    }
-                }
-
-                try
-                {
-                    return _Form.BeginInvoke(method, args);
-                }
-                catch (InvalidOperationException e)
-                {
-                    if (!_Form.IsHandleCreated)
-                        throw new ObjectDisposedException(GetType().ToString(), e);
-                    throw;
+                    _Thread.Start();
+                    _Initialized.WaitOne();
                 }
             }
 
-            public object EndInvoke(IAsyncResult asyncResult)
+            try
             {
-                return _Form.EndInvoke(asyncResult);
+                return _Form.BeginInvoke(method, args);
             }
-
-            [DllImport("user32.dll")]
-            private static extern void PostThreadMessage(int idThread, int Msg, IntPtr wParam,
-                IntPtr lParam);
-
-            [DllImport("kernel32.dll")]
-            private static extern int GetCurrentThreadId();
-
-            private void Run()
+            catch (InvalidOperationException e)
             {
-                Thread.VolatileWrite(ref _ThreadId, GetCurrentThreadId());
-                Application.ThreadException += Application_ThreadException;
-                Application.Run(_Form);
+                if (!_Form.IsHandleCreated)
+                    throw new ObjectDisposedException(GetType().ToString(), e);
+                throw;
             }
+        }
 
-            private void Form_Load(object source, EventArgs e)
-            {
-                _Initialized.Set();
-            }
+        public object EndInvoke(IAsyncResult asyncResult)
+        {
+            return _Form.EndInvoke(asyncResult);
+        }
 
-            private void Application_ThreadException(object sender, ThreadExceptionEventArgs e)
-            {
-                // This is here to prevent unhandled exceptions from appearing in a message box.
-            } // class
+        [DllImport("user32.dll")]
+        private static extern void PostThreadMessage(int idThread, int Msg, IntPtr wParam,
+            IntPtr lParam);
+
+        [DllImport("kernel32.dll")]
+        private static extern int GetCurrentThreadId();
+
+        private void Run()
+        {
+            Thread.VolatileWrite(ref _ThreadId, GetCurrentThreadId());
+            Application.ThreadException += Application_ThreadException;
+            Application.Run(_Form);
+        }
+
+        private void Form_Load(object source, EventArgs e)
+        {
+            _Initialized.Set();
+        }
+
+        private void Application_ThreadException(object sender, ThreadExceptionEventArgs e)
+        {
+            // This is here to prevent unhandled exceptions from appearing in a message box.
         } // class
     } // class
-} // namespace
+} // class
+// namespace

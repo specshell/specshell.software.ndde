@@ -33,54 +33,52 @@
 
 #endregion
 
-using System;
+namespace NDde.Internal.Server;
 
-namespace NDde.Internal.Server
+internal sealed class DdemlConversation
 {
-    internal sealed class DdemlConversation
+    private int _Waiting;
+
+    public DdemlConversation(IntPtr handle, string service, string topic)
     {
-        private int _Waiting;
+        Handle = handle;
+        Service = service;
+        Topic = topic;
+    }
 
-        public DdemlConversation(IntPtr handle, string service, string topic)
-        {
-            Handle = handle;
-            Service = service;
-            Topic = topic;
-        }
+    public IntPtr Handle { get; } = IntPtr.Zero;
 
-        public IntPtr Handle { get; } = IntPtr.Zero;
+    public string Topic { get; } = "";
 
-        public string Topic { get; } = "";
+    public string Service { get; } = "";
 
-        public string Service { get; } = "";
+    public bool IsPaused => _Waiting > 0;
 
-        public bool IsPaused => _Waiting > 0;
+    public object Tag { get; set; }
 
-        public object Tag { get; set; }
+    internal event EventHandler StateChange;
 
-        internal event EventHandler StateChange;
+    public override string ToString()
+    {
+        var s = "";
+        foreach (var property in GetType().GetProperties())
+            if (s.Length == 0)
+                s += property.Name + "=" + property.GetValue(this, null);
+            else
+                s += " " + property.Name + "=" + property.GetValue(this, null);
+        return s;
+    }
 
-        public override string ToString()
-        {
-            var s = "";
-            foreach (var property in GetType().GetProperties())
-                if (s.Length == 0)
-                    s += property.Name + "=" + property.GetValue(this, null);
-                else
-                    s += " " + property.Name + "=" + property.GetValue(this, null);
-            return s;
-        }
+    internal void IncrementWaiting()
+    {
+        _Waiting++;
+        StateChange?.Invoke(this, EventArgs.Empty);
+    }
 
-        internal void IncrementWaiting()
-        {
-            _Waiting++;
-            StateChange?.Invoke(this, EventArgs.Empty);
-        }
-
-        internal void DecrementWaiting()
-        {
-            _Waiting--;
-            StateChange?.Invoke(this, EventArgs.Empty);
-        }
-    } // class
-} // namespace
+    internal void DecrementWaiting()
+    {
+        _Waiting--;
+        StateChange?.Invoke(this, EventArgs.Empty);
+    }
+} // class
+// namespace

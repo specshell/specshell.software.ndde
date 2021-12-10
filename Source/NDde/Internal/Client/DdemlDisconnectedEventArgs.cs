@@ -33,18 +33,18 @@
 
 #endregion
 
-namespace NDde.Internal.Client
+namespace NDde.Internal.Client;
+
+internal sealed class DdemlDisconnectedEventArgs : DdemlEventArgs
 {
-    internal sealed class DdemlDisconnectedEventArgs : DdemlEventArgs
+    public DdemlDisconnectedEventArgs(bool serverInitiated, bool disposed)
     {
-        public DdemlDisconnectedEventArgs(bool serverInitiated, bool disposed)
-        {
-            IsServerInitiated = serverInitiated;
-            IsDisposed = disposed;
-        }
+        IsServerInitiated = serverInitiated;
+        IsDisposed = disposed;
+    }
 
-        public bool IsServerInitiated { get; }
+    public bool IsServerInitiated { get; }
 
-        public bool IsDisposed { get; }
-    } // class
-} // namespace
+    public bool IsDisposed { get; }
+} // class
+// namespace

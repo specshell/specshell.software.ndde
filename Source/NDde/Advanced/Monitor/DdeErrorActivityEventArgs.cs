@@ -35,23 +35,23 @@
 
 using NDde.Internal.Advanced.Monitor;
 
-namespace NDde.Advanced.Monitor
+namespace NDde.Advanced.Monitor;
+
+/// <summary>
+///     This contains information about the <c>ErrorActivity</c> event.
+/// </summary>
+public sealed class DdeErrorActivityEventArgs : DdeActivityEventArgs
 {
-    /// <summary>
-    ///     This contains information about the <c>ErrorActivity</c> event.
-    /// </summary>
-    public sealed class DdeErrorActivityEventArgs : DdeActivityEventArgs
+    private readonly DdemlErrorActivityEventArgs _DdemlObject;
+
+    internal DdeErrorActivityEventArgs(DdemlErrorActivityEventArgs args) : base(args)
     {
-        private readonly DdemlErrorActivityEventArgs _DdemlObject;
+        _DdemlObject = args;
+    }
 
-        internal DdeErrorActivityEventArgs(DdemlErrorActivityEventArgs args) : base(args)
-        {
-            _DdemlObject = args;
-        }
-
-        /// <summary>
-        ///     This gets an error code returned by the DDEML.
-        /// </summary>
-        public int Code => _DdemlObject.Code;
-    } // class
-} // namespace
+    /// <summary>
+    ///     This gets an error code returned by the DDEML.
+    /// </summary>
+    public int Code => _DdemlObject.Code;
+} // class
+// namespace

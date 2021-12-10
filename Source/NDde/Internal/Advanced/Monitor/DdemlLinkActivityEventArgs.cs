@@ -33,51 +33,49 @@
 
 #endregion
 
-using System;
+namespace NDde.Internal.Advanced.Monitor;
 
-namespace NDde.Internal.Advanced.Monitor
+internal sealed class DdemlLinkActivityEventArgs : DdemlActivityEventArgs
 {
-    internal sealed class DdemlLinkActivityEventArgs : DdemlActivityEventArgs
+    public DdemlLinkActivityEventArgs(
+        string service,
+        string topic,
+        string item,
+        int format,
+        bool hot,
+        bool established,
+        bool serverInitiated,
+        IntPtr clientHandle,
+        IntPtr serverHandle,
+        IntPtr taskHandle) : base(taskHandle)
     {
-        public DdemlLinkActivityEventArgs(
-            string service,
-            string topic,
-            string item,
-            int format,
-            bool hot,
-            bool established,
-            bool serverInitiated,
-            IntPtr clientHandle,
-            IntPtr serverHandle,
-            IntPtr taskHandle) : base(taskHandle)
-        {
-            Service = service;
-            Topic = topic;
-            Item = item;
-            Format = format;
-            IsHot = hot;
-            IsEstablished = established;
-            IsServerInitiated = serverInitiated;
-            ClientHandle = clientHandle;
-            ServerHandle = serverHandle;
-        }
+        Service = service;
+        Topic = topic;
+        Item = item;
+        Format = format;
+        IsHot = hot;
+        IsEstablished = established;
+        IsServerInitiated = serverInitiated;
+        ClientHandle = clientHandle;
+        ServerHandle = serverHandle;
+    }
 
-        public string Service { get; } = "";
+    public string Service { get; } = "";
 
-        public string Topic { get; } = "";
+    public string Topic { get; } = "";
 
-        public string Item { get; } = "";
+    public string Item { get; } = "";
 
-        public int Format { get; }
+    public int Format { get; }
 
-        public bool IsHot { get; }
+    public bool IsHot { get; }
 
-        public bool IsEstablished { get; }
+    public bool IsEstablished { get; }
 
-        public bool IsServerInitiated { get; }
+    public bool IsServerInitiated { get; }
 
-        public IntPtr ClientHandle { get; } = IntPtr.Zero;
+    public IntPtr ClientHandle { get; } = IntPtr.Zero;
 
-        public IntPtr ServerHandle { get; } = IntPtr.Zero;
-    } // class
-} // namespace
+    public IntPtr ServerHandle { get; } = IntPtr.Zero;
+} // class
+// namespace

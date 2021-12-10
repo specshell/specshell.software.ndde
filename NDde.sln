@@ -7,6 +7,8 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "NDde", "Source\NDde\NDde.cs
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "NDde.Test", "Source\NDde.Test\NDde.Test.csproj", "{D6FDDD04-3BB0-4AE4-B69A-CE8C1238FB00}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Source", "Source", "{71466941-0108-4CE5-BD92-D583E7E08755}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -27,5 +29,9 @@ Global
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {5F69BDEB-6037-4EE4-8D71-81266932AB81}
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{D77772F9-3D3D-40BA-B95F-05C45878078F} = {71466941-0108-4CE5-BD92-D583E7E08755}
+		{D6FDDD04-3BB0-4AE4-B69A-CE8C1238FB00} = {71466941-0108-4CE5-BD92-D583E7E08755}
 	EndGlobalSection
 EndGlobal

@@ -33,15 +33,15 @@
 
 #endregion
 
-namespace NDde.Internal.Advanced
-{
-    internal sealed class DdemlRegistrationEventArgs : DdemlEventArgs
-    {
-        public DdemlRegistrationEventArgs(string service)
-        {
-            Service = service;
-        }
+namespace NDde.Internal.Advanced;
 
-        public string Service { get; } = "";
-    } // class
-} // namespace
+internal sealed class DdemlRegistrationEventArgs : DdemlEventArgs
+{
+    public DdemlRegistrationEventArgs(string service)
+    {
+        Service = service;
+    }
+
+    public string Service { get; } = "";
+} // class
+// namespace

@@ -33,10 +33,10 @@
 
 #endregion
 
-namespace NDde.Internal.Advanced
+namespace NDde.Internal.Advanced;
+
+internal interface IDdemlTransactionFilter
 {
-    internal interface IDdemlTransactionFilter
-    {
-        bool PreFilterTransaction(DdemlTransaction t);
-    } // interface
-} // namespace
+    bool PreFilterTransaction(DdemlTransaction t);
+} // interface
+// namespace

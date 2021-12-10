@@ -33,17 +33,15 @@
 
 #endregion
 
-using System;
+namespace NDde.Internal.Advanced.Monitor;
 
-namespace NDde.Internal.Advanced.Monitor
+internal sealed class DdemlErrorActivityEventArgs : DdemlActivityEventArgs
 {
-    internal sealed class DdemlErrorActivityEventArgs : DdemlActivityEventArgs
+    public DdemlErrorActivityEventArgs(int code, IntPtr taskHandle) : base(taskHandle)
     {
-        public DdemlErrorActivityEventArgs(int code, IntPtr taskHandle) : base(taskHandle)
-        {
-            Code = code;
-        }
+        Code = code;
+    }
 
-        public int Code { get; } = Ddeml.DMLERR_NO_ERROR;
-    } // class
-} // namespace
+    public int Code { get; } = Ddeml.DMLERR_NO_ERROR;
+} // class
+// namespace

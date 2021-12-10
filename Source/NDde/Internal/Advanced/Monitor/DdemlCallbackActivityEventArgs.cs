@@ -33,51 +33,49 @@
 
 #endregion
 
-using System;
+namespace NDde.Internal.Advanced.Monitor;
 
-namespace NDde.Internal.Advanced.Monitor
+internal sealed class DdemlCallbackActivityEventArgs : DdemlActivityEventArgs
 {
-    internal sealed class DdemlCallbackActivityEventArgs : DdemlActivityEventArgs
+    public DdemlCallbackActivityEventArgs(
+        int uType,
+        int uFmt,
+        IntPtr hConv,
+        IntPtr hsz1,
+        IntPtr hsz2,
+        IntPtr hData,
+        IntPtr dwData1,
+        IntPtr dwData2,
+        IntPtr dwRet,
+        IntPtr taskHandle) : base(taskHandle)
     {
-        public DdemlCallbackActivityEventArgs(
-            int uType,
-            int uFmt,
-            IntPtr hConv,
-            IntPtr hsz1,
-            IntPtr hsz2,
-            IntPtr hData,
-            IntPtr dwData1,
-            IntPtr dwData2,
-            IntPtr dwRet,
-            IntPtr taskHandle) : base(taskHandle)
-        {
-            this.uType = uType;
-            this.uFmt = uFmt;
-            this.hConv = hConv;
-            this.hsz1 = hsz1;
-            this.hsz2 = hsz2;
-            this.hData = hData;
-            this.dwData1 = dwData1;
-            this.dwData2 = dwData2;
-            this.dwRet = dwRet;
-        }
+        this.uType = uType;
+        this.uFmt = uFmt;
+        this.hConv = hConv;
+        this.hsz1 = hsz1;
+        this.hsz2 = hsz2;
+        this.hData = hData;
+        this.dwData1 = dwData1;
+        this.dwData2 = dwData2;
+        this.dwRet = dwRet;
+    }
 
-        public int uType { get; }
+    public int uType { get; }
 
-        public int uFmt { get; }
+    public int uFmt { get; }
 
-        public IntPtr hConv { get; } = IntPtr.Zero;
+    public IntPtr hConv { get; } = IntPtr.Zero;
 
-        public IntPtr hsz1 { get; } = IntPtr.Zero;
+    public IntPtr hsz1 { get; } = IntPtr.Zero;
 
-        public IntPtr hsz2 { get; } = IntPtr.Zero;
+    public IntPtr hsz2 { get; } = IntPtr.Zero;
 
-        public IntPtr hData { get; } = IntPtr.Zero;
+    public IntPtr hData { get; } = IntPtr.Zero;
 
-        public IntPtr dwData1 { get; } = IntPtr.Zero;
+    public IntPtr dwData1 { get; } = IntPtr.Zero;
 
-        public IntPtr dwData2 { get; } = IntPtr.Zero;
+    public IntPtr dwData2 { get; } = IntPtr.Zero;
 
-        public IntPtr dwRet { get; } = IntPtr.Zero;
-    } // class
-} // namespace
+    public IntPtr dwRet { get; } = IntPtr.Zero;
+} // class
+// namespace

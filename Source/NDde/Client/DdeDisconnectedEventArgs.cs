@@ -35,35 +35,35 @@
 
 using NDde.Internal.Client;
 
-namespace NDde.Client
+namespace NDde.Client;
+
+/// <summary>
+///     This contains information about the <c>Disconnected</c> event.
+/// </summary>
+/// <threadsafety static="true" instance="false" />
+public sealed class DdeDisconnectedEventArgs : DdeEventArgs
 {
-    /// <summary>
-    ///     This contains information about the <c>Disconnected</c> event.
-    /// </summary>
-    /// <threadsafety static="true" instance="false" />
-    public sealed class DdeDisconnectedEventArgs : DdeEventArgs
+    private readonly DdemlDisconnectedEventArgs _DdemlObject;
+
+    internal DdeDisconnectedEventArgs(DdemlDisconnectedEventArgs args)
     {
-        private readonly DdemlDisconnectedEventArgs _DdemlObject;
+        _DdemlObject = args;
+    }
 
-        internal DdeDisconnectedEventArgs(DdemlDisconnectedEventArgs args)
-        {
-            _DdemlObject = args;
-        }
+    /// <summary>
+    ///     This gets a bool indicating whether the client disconnected because of the server.
+    /// </summary>
+    public bool IsServerInitiated => _DdemlObject.IsServerInitiated;
 
-        /// <summary>
-        ///     This gets a bool indicating whether the client disconnected because of the server.
-        /// </summary>
-        public bool IsServerInitiated => _DdemlObject.IsServerInitiated;
-
-        /// <summary>
-        ///     This gets a bool indicating whether the client disconnected because <c>Dispose</c> was explicitly called.
-        /// </summary>
-        /// <remarks>
-        ///     The value will be true if <c>Dispose</c> was explicitly called on <c>DdeClient</c>.  The <c>DdeClient</c> sending
-        ///     this event has
-        ///     been disposed and can no longer be accessed.  Any exception thrown in the currently executing method will be
-        ///     ignored.
-        /// </remarks>
-        public bool IsDisposed => _DdemlObject.IsDisposed;
-    } // class
-} // namespace
+    /// <summary>
+    ///     This gets a bool indicating whether the client disconnected because <c>Dispose</c> was explicitly called.
+    /// </summary>
+    /// <remarks>
+    ///     The value will be true if <c>Dispose</c> was explicitly called on <c>DdeClient</c>.  The <c>DdeClient</c> sending
+    ///     this event has
+    ///     been disposed and can no longer be accessed.  Any exception thrown in the currently executing method will be
+    ///     ignored.
+    /// </remarks>
+    public bool IsDisposed => _DdemlObject.IsDisposed;
+} // class
+// namespace

@@ -33,39 +33,38 @@
 
 #endregion
 
-using System;
 using System.Runtime.Serialization;
 using NDde.Properties;
 
-namespace NDde.Internal
+namespace NDde.Internal;
+
+[Serializable]
+internal class DdemlException : Exception
 {
-    [Serializable]
-    internal class DdemlException : Exception
+    public DdemlException() : this(Resources.UnknownErrorMessage)
     {
-        public DdemlException() : this(Resources.UnknownErrorMessage)
-        {
-        }
+    }
 
-        public DdemlException(string message) : base(message)
-        {
-        }
+    public DdemlException(string message) : base(message)
+    {
+    }
 
-        public DdemlException(string message, int code) : base(message)
-        {
-            Code = code;
-        }
+    public DdemlException(string message, int code) : base(message)
+    {
+        Code = code;
+    }
 
-        protected DdemlException(SerializationInfo info, StreamingContext context) : base(info, context)
-        {
-            Code = info.GetInt32("NDde.Ddeml.DdemlException.Code");
-        }
+    protected DdemlException(SerializationInfo info, StreamingContext context) : base(info, context)
+    {
+        Code = info.GetInt32("NDde.Ddeml.DdemlException.Code");
+    }
 
-        public int Code { get; }
+    public int Code { get; }
 
-        public override void GetObjectData(SerializationInfo info, StreamingContext context)
-        {
-            info.AddValue("NDde.Ddeml.DdemlException.Code", Code);
-            base.GetObjectData(info, context);
-        }
-    } // class
-} // namespace
+    public override void GetObjectData(SerializationInfo info, StreamingContext context)
+    {
+        info.AddValue("NDde.Ddeml.DdemlException.Code", Code);
+        base.GetObjectData(info, context);
+    }
+} // class
+// namespace

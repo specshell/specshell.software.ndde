@@ -33,47 +33,46 @@
 
 #endregion
 
-using System.Windows.Forms;
 using NDde.Internal.Advanced.Monitor;
 
-namespace NDde.Advanced.Monitor
+namespace NDde.Advanced.Monitor;
+
+/// <summary>
+///     This represents the kind of message contained in <c>DdeMessageActivityEventArgs</c>.
+/// </summary>
+public enum DdeMessageActivityKind
 {
     /// <summary>
-    ///     This represents the kind of message contained in <c>DdeMessageActivityEventArgs</c>.
+    ///     The message was posted by a DDE application.
     /// </summary>
-    public enum DdeMessageActivityKind
-    {
-        /// <summary>
-        ///     The message was posted by a DDE application.
-        /// </summary>
-        Post,
-
-        /// <summary>
-        ///     The message was sent by a DDE application.
-        /// </summary>
-        Send,
-    } // enum
+    Post,
 
     /// <summary>
-    ///     This contains information about the <c>MessageActivity</c> event.
+    ///     The message was sent by a DDE application.
     /// </summary>
-    public sealed class DdeMessageActivityEventArgs : DdeActivityEventArgs
+    Send,
+} // enum
+
+/// <summary>
+///     This contains information about the <c>MessageActivity</c> event.
+/// </summary>
+public sealed class DdeMessageActivityEventArgs : DdeActivityEventArgs
+{
+    private readonly DdemlMessageActivityEventArgs _DdemlObject;
+
+    internal DdeMessageActivityEventArgs(DdemlMessageActivityEventArgs args) : base(args)
     {
-        private readonly DdemlMessageActivityEventArgs _DdemlObject;
+        _DdemlObject = args;
+    }
 
-        internal DdeMessageActivityEventArgs(DdemlMessageActivityEventArgs args) : base(args)
-        {
-            _DdemlObject = args;
-        }
+    /// <summary>
+    ///     This gets the kind of message associated with this event.
+    /// </summary>
+    public DdeMessageActivityKind Kind => (DdeMessageActivityKind) (int) _DdemlObject.Kind;
 
-        /// <summary>
-        ///     This gets the kind of message associated with this event.
-        /// </summary>
-        public DdeMessageActivityKind Kind => (DdeMessageActivityKind) (int) _DdemlObject.Kind;
-
-        /// <summary>
-        ///     This gets the message associated with this event.
-        /// </summary>
-        public Message Message => _DdemlObject.Message;
-    } // class
-} // namespace
+    /// <summary>
+    ///     This gets the message associated with this event.
+    /// </summary>
+    public Message Message => _DdemlObject.Message;
+} // class
+// namespace

@@ -33,435 +33,430 @@
 
 #endregion
 
-using System;
-using System.Collections.Generic;
-using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
-using System.Threading;
-using System.Windows.Forms;
 using NDde.Internal.Client;
 using NDde.Internal.Server;
 using NDde.Internal.Utility;
 using NDde.Properties;
 
-namespace NDde.Internal.Advanced
+namespace NDde.Internal.Advanced;
+
+internal sealed class DdemlContext : IDisposable
 {
-    internal sealed class DdemlContext : IDisposable
+    private static readonly WeakReferenceDictionary<int, DdemlContext> _Instances =
+        new();
+
+    private readonly Ddeml.DdeCallback _Callback; // DDEML callback function
+
+    private readonly WeakReferenceDictionary<IntPtr, DdemlClient> _ClientTable =
+        new(); // Active clients by conversation
+
+    private readonly List<IDdemlTransactionFilter> _Filters = new(); // ITransactionFilter objects
+
+    private readonly WeakReferenceDictionary<IntPtr, DdemlServer> _ServerTable1 =
+        new(); // Active servers by conversation
+
+    private readonly WeakReferenceDictionary<string, DdemlServer> _ServerTable2 =
+        new(); // Active servers by service
+
+    public DdemlContext()
     {
-        private static readonly WeakReferenceDictionary<int, DdemlContext> _Instances =
-            new();
+        // Create the callback that will be used by the DDEML.
+        _Callback = OnDdeCallback;
+    }
 
-        private readonly Ddeml.DdeCallback _Callback; // DDEML callback function
+    public int InstanceId { get; private set; }
 
-        private readonly WeakReferenceDictionary<IntPtr, DdemlClient> _ClientTable =
-            new(); // Active clients by conversation
+    public bool IsInitialized => InstanceId != 0;
 
-        private readonly List<IDdemlTransactionFilter> _Filters = new(); // ITransactionFilter objects
+    public Encoding Encoding { get; set; } = Encoding.ASCII;
 
-        private readonly WeakReferenceDictionary<IntPtr, DdemlServer> _ServerTable1 =
-            new(); // Active servers by conversation
+    internal bool IsDisposed { get; private set; }
 
-        private readonly WeakReferenceDictionary<string, DdemlServer> _ServerTable2 =
-            new(); // Active servers by service
+    public void Dispose()
+    {
+        Dispose(true);
+        GC.SuppressFinalize(this);
+    }
 
-        public DdemlContext()
+    internal static DdemlContext GetDefault()
+    {
+        lock (_Instances)
         {
-            // Create the callback that will be used by the DDEML.
-            _Callback = OnDdeCallback;
+            var context = _Instances[Ddeml.GetCurrentThreadId()];
+            if (context != null) return context;
+            context = new DdemlContext();
+            _Instances.Add(Ddeml.GetCurrentThreadId(), context);
+
+            return context;
         }
+    }
 
-        public int InstanceId { get; private set; }
+    public event EventHandler<DdemlRegistrationEventArgs> Register;
 
-        public bool IsInitialized => InstanceId != 0;
+    public event EventHandler<DdemlRegistrationEventArgs> Unregister;
 
-        public Encoding Encoding { get; set; } = Encoding.ASCII;
+    internal event EventHandler StateChange;
 
-        internal bool IsDisposed { get; private set; }
+    ~DdemlContext()
+    {
+        Dispose(false);
+    }
 
-        public void Dispose()
+    private void Dispose(bool disposing)
+    {
+        if (IsDisposed) return;
+        IsDisposed = true;
+        if (disposing)
         {
-            Dispose(true);
-            GC.SuppressFinalize(this);
-        }
+            // Dispose all clients.
+            foreach (var client in _ClientTable.Values)
+                client.Dispose();
 
-        internal static DdemlContext GetDefault()
-        {
-            lock (_Instances)
-            {
-                var context = _Instances[Ddeml.GetCurrentThreadId()];
-                if (context != null) return context;
-                context = new DdemlContext();
-                _Instances.Add(Ddeml.GetCurrentThreadId(), context);
-
-                return context;
-            }
-        }
-
-        public event EventHandler<DdemlRegistrationEventArgs> Register;
-
-        public event EventHandler<DdemlRegistrationEventArgs> Unregister;
-
-        internal event EventHandler StateChange;
-
-        ~DdemlContext()
-        {
-            Dispose(false);
-        }
-
-        private void Dispose(bool disposing)
-        {
-            if (IsDisposed) return;
-            IsDisposed = true;
-            if (disposing)
-            {
-                // Dispose all clients.
-                foreach (var client in _ClientTable.Values)
-                    client.Dispose();
-
-                // Dispose all servers.
-                foreach (var server in _ServerTable2.Values)
-                    server.Dispose();
-
-                // Raise the StateChange event.
-                if (StateChange != null)
-                    foreach (var handler in StateChange.GetInvocationList())
-                    {
-                        if (handler is not EventHandler eventHandler) continue;
-                        try
-                        {
-                            eventHandler(this, EventArgs.Empty);
-                        }
-                        catch
-                        {
-                            // Swallow any exception that occurs.
-                        }
-                    }
-            }
-
-            if (!IsInitialized) return;
-            // Uninitialize this DDEML instance.
-            InstanceManager.Uninitialize(InstanceId);
-
-            // Indicate that this object is no longer initialized.
-            InstanceId = 0;
-        }
-
-        public void Initialize()
-        {
-            if (IsDisposed)
-                throw new ObjectDisposedException(GetType().ToString());
-            if (IsInitialized)
-                throw new InvalidOperationException(Resources.AlreadyInitializedMessage);
-
-            Initialize(Ddeml.APPCLASS_STANDARD);
+            // Dispose all servers.
+            foreach (var server in _ServerTable2.Values)
+                server.Dispose();
 
             // Raise the StateChange event.
-            StateChange?.Invoke(this, EventArgs.Empty);
+            if (StateChange != null)
+                foreach (var handler in StateChange.GetInvocationList())
+                {
+                    if (handler is not EventHandler eventHandler) continue;
+                    try
+                    {
+                        eventHandler(this, EventArgs.Empty);
+                    }
+                    catch
+                    {
+                        // Swallow any exception that occurs.
+                    }
+                }
         }
 
-        public void AddTransactionFilter(IDdemlTransactionFilter filter)
-        {
-            if (IsDisposed)
-                throw new ObjectDisposedException(GetType().ToString());
-            if (filter == null)
-                throw new ArgumentNullException(nameof(filter));
-            if (_Filters.Contains(filter))
-                throw new InvalidOperationException(Resources.FilterAlreadyAddedMessage);
+        if (!IsInitialized) return;
+        // Uninitialize this DDEML instance.
+        InstanceManager.Uninitialize(InstanceId);
 
-            _Filters.Add(filter);
+        // Indicate that this object is no longer initialized.
+        InstanceId = 0;
+    }
+
+    public void Initialize()
+    {
+        if (IsDisposed)
+            throw new ObjectDisposedException(GetType().ToString());
+        if (IsInitialized)
+            throw new InvalidOperationException(Resources.AlreadyInitializedMessage);
+
+        Initialize(Ddeml.APPCLASS_STANDARD);
+
+        // Raise the StateChange event.
+        StateChange?.Invoke(this, EventArgs.Empty);
+    }
+
+    public void AddTransactionFilter(IDdemlTransactionFilter filter)
+    {
+        if (IsDisposed)
+            throw new ObjectDisposedException(GetType().ToString());
+        if (filter == null)
+            throw new ArgumentNullException(nameof(filter));
+        if (_Filters.Contains(filter))
+            throw new InvalidOperationException(Resources.FilterAlreadyAddedMessage);
+
+        _Filters.Add(filter);
+    }
+
+    public void RemoveTransactionFilter(IDdemlTransactionFilter filter)
+    {
+        if (IsDisposed)
+            throw new ObjectDisposedException(GetType().ToString());
+        if (filter == null)
+            throw new ArgumentNullException(nameof(filter));
+        if (!_Filters.Contains(filter))
+            throw new InvalidOperationException(Resources.FilterNotAddedMessage);
+
+        _Filters.Remove(filter);
+    }
+
+    internal void Initialize(int afCmd)
+    {
+        // Initialize a DDEML instance.
+        InstanceId = InstanceManager.Initialize(_Callback, afCmd);
+
+        // If the instance identifier is null then the DDEML could not be initialized.
+        if (InstanceId != 0) return;
+        var error = Ddeml.DdeGetLastError(InstanceId);
+        throw new DdemlException(Resources.InitializeFailedMessage, error);
+    }
+
+    internal void RegisterClient(DdemlClient client)
+    {
+        _ClientTable[client.Handle] = client;
+    }
+
+    internal void RegisterServer(DdemlServer server)
+    {
+        _ServerTable2[server.Service] = server;
+    }
+
+    internal void UnregisterClient(DdemlClient client)
+    {
+        _ClientTable[client.Handle] = null;
+    }
+
+    internal void UnregisterServer(DdemlServer server)
+    {
+        _ServerTable2[server.Service] = null;
+    }
+
+    private IntPtr OnDdeCallback(int uType, int uFmt, IntPtr hConv, IntPtr hsz1, IntPtr hsz2, IntPtr hData,
+        IntPtr dwData1, IntPtr dwData2)
+    {
+        // Create a new transaction object that will be dispatched to a DdemlClient, DdemlServer, or ITransactionFilter.
+        var t = new DdemlTransaction(uType, uFmt, hConv, hsz1, hsz2, hData, dwData1, dwData2);
+
+        // Run each transaction filter.
+        if (_Filters.Any(filter => filter.PreFilterTransaction(t)))
+        {
+            return t.dwRet;
         }
 
-        public void RemoveTransactionFilter(IDdemlTransactionFilter filter)
+        // Dispatch the transaction.
+        switch (uType)
         {
-            if (IsDisposed)
-                throw new ObjectDisposedException(GetType().ToString());
-            if (filter == null)
-                throw new ArgumentNullException(nameof(filter));
-            if (!_Filters.Contains(filter))
-                throw new InvalidOperationException(Resources.FilterNotAddedMessage);
-
-            _Filters.Remove(filter);
-        }
-
-        internal void Initialize(int afCmd)
-        {
-            // Initialize a DDEML instance.
-            InstanceId = InstanceManager.Initialize(_Callback, afCmd);
-
-            // If the instance identifier is null then the DDEML could not be initialized.
-            if (InstanceId != 0) return;
-            var error = Ddeml.DdeGetLastError(InstanceId);
-            throw new DdemlException(Resources.InitializeFailedMessage, error);
-        }
-
-        internal void RegisterClient(DdemlClient client)
-        {
-            _ClientTable[client.Handle] = client;
-        }
-
-        internal void RegisterServer(DdemlServer server)
-        {
-            _ServerTable2[server.Service] = server;
-        }
-
-        internal void UnregisterClient(DdemlClient client)
-        {
-            _ClientTable[client.Handle] = null;
-        }
-
-        internal void UnregisterServer(DdemlServer server)
-        {
-            _ServerTable2[server.Service] = null;
-        }
-
-        private IntPtr OnDdeCallback(int uType, int uFmt, IntPtr hConv, IntPtr hsz1, IntPtr hsz2, IntPtr hData,
-            IntPtr dwData1, IntPtr dwData2)
-        {
-            // Create a new transaction object that will be dispatched to a DdemlClient, DdemlServer, or ITransactionFilter.
-            var t = new DdemlTransaction(uType, uFmt, hConv, hsz1, hsz2, hData, dwData1, dwData2);
-
-            // Run each transaction filter.
-            if (_Filters.Any(filter => filter.PreFilterTransaction(t)))
+            case Ddeml.XTYP_ADVDATA:
             {
-                return t.dwRet;
+                var client = _ClientTable[hConv];
+                if (client != null)
+                    if (client.ProcessCallback(t))
+                        return t.dwRet;
+                break;
             }
-
-            // Dispatch the transaction.
-            switch (uType)
+            case Ddeml.XTYP_ADVREQ:
             {
-                case Ddeml.XTYP_ADVDATA:
+                var server = _ServerTable1[hConv];
+                if (server != null)
+                    if (server.ProcessCallback(t))
+                        return t.dwRet;
+                break;
+            }
+            case Ddeml.XTYP_ADVSTART:
+            {
+                var server = _ServerTable1[hConv];
+                if (server != null)
+                    if (server.ProcessCallback(t))
+                        return t.dwRet;
+                break;
+            }
+            case Ddeml.XTYP_ADVSTOP:
+            {
+                var server = _ServerTable1[hConv];
+                if (server != null)
+                    if (server.ProcessCallback(t))
+                        return t.dwRet;
+                break;
+            }
+            case Ddeml.XTYP_CONNECT:
+            {
+                // Get the service name from the hsz2 string handle.
+                var psz = new StringBuilder(Ddeml.MAX_STRING_SIZE);
+                var length = Ddeml.DdeQueryString(InstanceId, hsz2, psz, psz.Capacity,
+                    Ddeml.CP_WINANSI);
+                var service = psz.ToString();
+
+                var server = _ServerTable2[service];
+                if (server != null)
+                    if (server.ProcessCallback(t))
+                        return t.dwRet;
+                break;
+            }
+            case Ddeml.XTYP_CONNECT_CONFIRM:
+            {
+                // Get the service name from the hsz2 string handle.
+                var psz = new StringBuilder(Ddeml.MAX_STRING_SIZE);
+                var length = Ddeml.DdeQueryString(InstanceId, hsz2, psz, psz.Capacity,
+                    Ddeml.CP_WINANSI);
+                var service = psz.ToString();
+
+                var server = _ServerTable2[service];
+                if (server != null)
                 {
-                    var client = _ClientTable[hConv];
-                    if (client != null)
-                        if (client.ProcessCallback(t))
-                            return t.dwRet;
-                    break;
+                    _ServerTable1[hConv] = server;
+                    if (server.ProcessCallback(t))
+                        return t.dwRet;
                 }
-                case Ddeml.XTYP_ADVREQ:
+
+                break;
+            }
+            case Ddeml.XTYP_DISCONNECT:
+            {
+                var client = _ClientTable[hConv];
+                if (client != null)
                 {
-                    var server = _ServerTable1[hConv];
-                    if (server != null)
-                        if (server.ProcessCallback(t))
-                            return t.dwRet;
-                    break;
+                    _ClientTable[hConv] = null;
+                    if (client.ProcessCallback(t))
+                        return t.dwRet;
                 }
-                case Ddeml.XTYP_ADVSTART:
+
+                var server = _ServerTable1[hConv];
+                if (server != null)
                 {
-                    var server = _ServerTable1[hConv];
-                    if (server != null)
-                        if (server.ProcessCallback(t))
-                            return t.dwRet;
-                    break;
+                    _ServerTable1[hConv] = null;
+                    if (server.ProcessCallback(t))
+                        return t.dwRet;
                 }
-                case Ddeml.XTYP_ADVSTOP:
-                {
-                    var server = _ServerTable1[hConv];
-                    if (server != null)
-                        if (server.ProcessCallback(t))
-                            return t.dwRet;
-                    break;
-                }
-                case Ddeml.XTYP_CONNECT:
-                {
-                    // Get the service name from the hsz2 string handle.
-                    var psz = new StringBuilder(Ddeml.MAX_STRING_SIZE);
-                    var length = Ddeml.DdeQueryString(InstanceId, hsz2, psz, psz.Capacity,
+
+                break;
+            }
+            case Ddeml.XTYP_EXECUTE:
+            {
+                var server = _ServerTable1[hConv];
+                if (server != null)
+                    if (server.ProcessCallback(t))
+                        return t.dwRet;
+                break;
+            }
+            case Ddeml.XTYP_POKE:
+            {
+                var server = _ServerTable1[hConv];
+                if (server != null)
+                    if (server.ProcessCallback(t))
+                        return t.dwRet;
+                break;
+            }
+            case Ddeml.XTYP_REQUEST:
+            {
+                var server = _ServerTable1[hConv];
+                if (server != null)
+                    if (server.ProcessCallback(t))
+                        return t.dwRet;
+                break;
+            }
+            case Ddeml.XTYP_XACT_COMPLETE:
+            {
+                var client = _ClientTable[hConv];
+                if (client != null)
+                    if (client.ProcessCallback(t))
+                        return t.dwRet;
+                break;
+            }
+            case Ddeml.XTYP_WILDCONNECT:
+            {
+                // This library does not support wild connects.
+                return IntPtr.Zero;
+            }
+            case Ddeml.XTYP_MONITOR:
+            {
+                // Monitors are handled separately in DdemlMonitor.
+                return IntPtr.Zero;
+            }
+            case Ddeml.XTYP_ERROR:
+            {
+                // Get the error code, but do nothing with it at this time.
+                var error = dwData1.ToInt32();
+
+                return IntPtr.Zero;
+            }
+            case Ddeml.XTYP_REGISTER:
+            {
+                if (Register == null) return IntPtr.Zero;
+                // Get the service name from the hsz1 string handle.
+                var psz = new StringBuilder(Ddeml.MAX_STRING_SIZE);
+                var length =
+                    Ddeml.DdeQueryString(InstanceId, hsz1, psz, psz.Capacity,
                         Ddeml.CP_WINANSI);
-                    var service = psz.ToString();
+                var service = psz.ToString();
 
-                    var server = _ServerTable2[service];
-                    if (server != null)
-                        if (server.ProcessCallback(t))
-                            return t.dwRet;
-                    break;
-                }
-                case Ddeml.XTYP_CONNECT_CONFIRM:
-                {
-                    // Get the service name from the hsz2 string handle.
-                    var psz = new StringBuilder(Ddeml.MAX_STRING_SIZE);
-                    var length = Ddeml.DdeQueryString(InstanceId, hsz2, psz, psz.Capacity,
-                        Ddeml.CP_WINANSI);
-                    var service = psz.ToString();
+                Register(this, new DdemlRegistrationEventArgs(service));
 
-                    var server = _ServerTable2[service];
-                    if (server != null)
-                    {
-                        _ServerTable1[hConv] = server;
-                        if (server.ProcessCallback(t))
-                            return t.dwRet;
-                    }
-
-                    break;
-                }
-                case Ddeml.XTYP_DISCONNECT:
-                {
-                    var client = _ClientTable[hConv];
-                    if (client != null)
-                    {
-                        _ClientTable[hConv] = null;
-                        if (client.ProcessCallback(t))
-                            return t.dwRet;
-                    }
-
-                    var server = _ServerTable1[hConv];
-                    if (server != null)
-                    {
-                        _ServerTable1[hConv] = null;
-                        if (server.ProcessCallback(t))
-                            return t.dwRet;
-                    }
-
-                    break;
-                }
-                case Ddeml.XTYP_EXECUTE:
-                {
-                    var server = _ServerTable1[hConv];
-                    if (server != null)
-                        if (server.ProcessCallback(t))
-                            return t.dwRet;
-                    break;
-                }
-                case Ddeml.XTYP_POKE:
-                {
-                    var server = _ServerTable1[hConv];
-                    if (server != null)
-                        if (server.ProcessCallback(t))
-                            return t.dwRet;
-                    break;
-                }
-                case Ddeml.XTYP_REQUEST:
-                {
-                    var server = _ServerTable1[hConv];
-                    if (server != null)
-                        if (server.ProcessCallback(t))
-                            return t.dwRet;
-                    break;
-                }
-                case Ddeml.XTYP_XACT_COMPLETE:
-                {
-                    var client = _ClientTable[hConv];
-                    if (client != null)
-                        if (client.ProcessCallback(t))
-                            return t.dwRet;
-                    break;
-                }
-                case Ddeml.XTYP_WILDCONNECT:
-                {
-                    // This library does not support wild connects.
-                    return IntPtr.Zero;
-                }
-                case Ddeml.XTYP_MONITOR:
-                {
-                    // Monitors are handled separately in DdemlMonitor.
-                    return IntPtr.Zero;
-                }
-                case Ddeml.XTYP_ERROR:
-                {
-                    // Get the error code, but do nothing with it at this time.
-                    var error = dwData1.ToInt32();
-
-                    return IntPtr.Zero;
-                }
-                case Ddeml.XTYP_REGISTER:
-                {
-                    if (Register == null) return IntPtr.Zero;
-                    // Get the service name from the hsz1 string handle.
-                    var psz = new StringBuilder(Ddeml.MAX_STRING_SIZE);
-                    var length =
-                        Ddeml.DdeQueryString(InstanceId, hsz1, psz, psz.Capacity,
-                            Ddeml.CP_WINANSI);
-                    var service = psz.ToString();
-
-                    Register(this, new DdemlRegistrationEventArgs(service));
-
-                    return IntPtr.Zero;
-                }
-                case Ddeml.XTYP_UNREGISTER:
-                {
-                    if (Unregister == null) return IntPtr.Zero;
-                    // Get the service name from the hsz1 string handle.
-                    var psz = new StringBuilder(Ddeml.MAX_STRING_SIZE);
-                    var length =
-                        Ddeml.DdeQueryString(InstanceId, hsz1, psz, psz.Capacity,
-                            Ddeml.CP_WINANSI);
-                    var service = psz.ToString();
-
-                    Unregister(this, new DdemlRegistrationEventArgs(service));
-
-                    return IntPtr.Zero;
-                }
+                return IntPtr.Zero;
             }
+            case Ddeml.XTYP_UNREGISTER:
+            {
+                if (Unregister == null) return IntPtr.Zero;
+                // Get the service name from the hsz1 string handle.
+                var psz = new StringBuilder(Ddeml.MAX_STRING_SIZE);
+                var length =
+                    Ddeml.DdeQueryString(InstanceId, hsz1, psz, psz.Capacity,
+                        Ddeml.CP_WINANSI);
+                var service = psz.ToString();
 
-            return IntPtr.Zero;
+                Unregister(this, new DdemlRegistrationEventArgs(service));
+
+                return IntPtr.Zero;
+            }
         }
 
-        /// <summary>
-        ///     This class is needed to dispose of DDEML resources correctly since the DDEML is thread specific.
-        /// </summary>
-        private sealed class InstanceManager : IMessageFilter
+        return IntPtr.Zero;
+    }
+
+    /// <summary>
+    ///     This class is needed to dispose of DDEML resources correctly since the DDEML is thread specific.
+    /// </summary>
+    private sealed class InstanceManager : IMessageFilter
+    {
+        private const int WM_APP = 0x8000;
+
+        private static readonly string DataSlot = typeof(InstanceManager).FullName;
+
+        private static readonly IDictionary<int, int> _Table = new Dictionary<int, int>();
+
+        bool IMessageFilter.PreFilterMessage(ref Message m)
         {
-            private const int WM_APP = 0x8000;
+            if (m.Msg == WM_APP + 1)
+                Ddeml.DdeUninitialize(m.WParam.ToInt32());
+            return false;
+        }
 
-            private static readonly string DataSlot = typeof(InstanceManager).FullName;
+        [DllImport("user32.dll")]
+        private static extern void PostThreadMessage(int idThread, int Msg, IntPtr wParam,
+            IntPtr lParam);
 
-            private static readonly IDictionary<int, int> _Table = new Dictionary<int, int>();
-
-            bool IMessageFilter.PreFilterMessage(ref Message m)
+        public static int Initialize(Ddeml.DdeCallback pfnCallback, int afCmd)
+        {
+            lock (_Table)
             {
-                if (m.Msg == WM_APP + 1)
-                    Ddeml.DdeUninitialize(m.WParam.ToInt32());
-                return false;
-            }
+                // Initialize a DDEML instance.
+                var instanceId = 0;
+                Ddeml.DdeInitialize(ref instanceId, pfnCallback, afCmd, 0);
 
-            [DllImport("user32.dll")]
-            private static extern void PostThreadMessage(int idThread, int Msg, IntPtr wParam,
-                IntPtr lParam);
-
-            public static int Initialize(Ddeml.DdeCallback pfnCallback, int afCmd)
-            {
-                lock (_Table)
+                if (instanceId == 0) return instanceId;
+                // Make sure this thread has an IMessageFilter on it.
+                var slot = Thread.GetNamedDataSlot(DataSlot);
+                if (Thread.GetData(slot) == null)
                 {
-                    // Initialize a DDEML instance.
-                    var instanceId = 0;
-                    Ddeml.DdeInitialize(ref instanceId, pfnCallback, afCmd, 0);
-
-                    if (instanceId == 0) return instanceId;
-                    // Make sure this thread has an IMessageFilter on it.
-                    var slot = Thread.GetNamedDataSlot(DataSlot);
-                    if (Thread.GetData(slot) == null)
-                    {
-                        var filter = new InstanceManager();
-                        Application.AddMessageFilter(filter);
-                        Thread.SetData(slot, filter);
-                    }
-
-                    // Add an entry to the table that maps the instance identifier to the current thread.
-                    _Table.Add(instanceId, Ddeml.GetCurrentThreadId());
-
-                    return instanceId;
+                    var filter = new InstanceManager();
+                    Application.AddMessageFilter(filter);
+                    Thread.SetData(slot, filter);
                 }
-            }
 
-            public static void Uninitialize(int instanceId)
+                // Add an entry to the table that maps the instance identifier to the current thread.
+                _Table.Add(instanceId, Ddeml.GetCurrentThreadId());
+
+                return instanceId;
+            }
+        }
+
+        public static void Uninitialize(int instanceId)
+        {
+            // This method could be called by the GC finalizer thread.  If it is then a direct call to the DDEML will fail since the DDEML is
+            // thread specific.  A message will be posted to the DDEML thread instead.
+            lock (_Table)
             {
-                // This method could be called by the GC finalizer thread.  If it is then a direct call to the DDEML will fail since the DDEML is
-                // thread specific.  A message will be posted to the DDEML thread instead.
-                lock (_Table)
-                {
-                    if (!_Table.ContainsKey(instanceId)) return;
-                    // Determine if the current thread matches what is in the table.
-                    var threadId = _Table[instanceId];
-                    if (threadId == Ddeml.GetCurrentThreadId())
-                        Ddeml.DdeUninitialize(instanceId);
-                    else
-                        PostThreadMessage(threadId, WM_APP + 1, new IntPtr(instanceId),
-                            IntPtr.Zero);
+                if (!_Table.ContainsKey(instanceId)) return;
+                // Determine if the current thread matches what is in the table.
+                var threadId = _Table[instanceId];
+                if (threadId == Ddeml.GetCurrentThreadId())
+                    Ddeml.DdeUninitialize(instanceId);
+                else
+                    PostThreadMessage(threadId, WM_APP + 1, new IntPtr(instanceId),
+                        IntPtr.Zero);
 
-                    // Remove the instance identifier from the table because it is no longer in use.
-                    _Table.Remove(instanceId);
-                }
+                // Remove the instance identifier from the table because it is no longer in use.
+                _Table.Remove(instanceId);
             }
-        } // class
+        }
     } // class
-} // namespace
+} // class
+// namespace
