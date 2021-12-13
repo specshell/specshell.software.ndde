@@ -7,7 +7,7 @@
     <AssemblyTitle>Client</AssemblyTitle>
     <Product>Client</Product>
     <Copyright>Copyright ©  2005</Copyright>
-    <TargetFramework>net5.0-windows</TargetFramework>
+    <TargetFramework>net6.0-windows</TargetFramework>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\Source\NDde\NDde.csproj" />
