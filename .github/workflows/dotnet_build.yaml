@@ -1,0 +1,24 @@
+name: DotNet Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  release:
+    types: [published]
+
+jobs:
+  dotnet:
+    uses: specshell/.github/.github/workflows/dotnet-build.yml@main
+    with:
+      runs-on: windows-2022
+    secrets:
+      package_user: ${{ secrets.NEXUS_USER }}
+      package_password: ${{ secrets.NEXUS_PASSWORD }}
+      package_nuget_feed: ${{ secrets.NEXUS_NUGET_FEED }}
+      push_nuget_feed: ${{ secrets.NEXUS_NUGET_FEED }}
+      push_nuget_api_key: ${{ secrets.NEXUS_NUGET_API_KEY }}
+      code_sign_password: ${{ secrets.CERTIFICATE_PFX_PASSWORD }}
+      code_sign_pfx: ${{ secrets.CERTIFICATE_PFX_FILE }}
+      codecov_token: ${{ secrets.CODECOV_TOKEN }}

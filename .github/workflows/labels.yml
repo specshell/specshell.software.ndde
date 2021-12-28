@@ -1,7 +1,7 @@
 name: labels
 on:
   push:
-    branch:
+    branches:
       - main
     paths:
       - '.github/labels.yml'
